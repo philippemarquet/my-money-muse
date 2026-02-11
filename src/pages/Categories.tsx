@@ -7,11 +7,25 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import {
-  ShoppingCart, Home, Car, Film, Briefcase, Gift, Heart, Utensils,
+  ShoppingCart,
+  Home,
+  Car,
+  Film,
+  Briefcase,
+  Gift,
+  Heart,
+  Utensils,
 } from "lucide-react";
 
 const iconMap: Record<string, any> = {
-  ShoppingCart, Home, Car, Film, Briefcase, Gift, Heart, Utensils,
+  ShoppingCart,
+  Home,
+  Car,
+  Film,
+  Briefcase,
+  Gift,
+  Heart,
+  Utensils,
 };
 
 type CategoryRow = {
@@ -33,7 +47,7 @@ const Categories = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("categories")
-        .select("id,name,type,color,icon,parent_id")
+        .select("id,name,type,color,icon,parent_id,archived,sort_order")
         .eq("archived", false)
         .order("sort_order", { ascending: true })
         .order("name", { ascending: true });
@@ -116,22 +130,34 @@ const Categories = () => {
                   >
                     <Icon className="h-5 w-5" />
                   </div>
+
                   <div className="flex-1">
                     <h3 className="font-medium">{cat.name}</h3>
                     <p className="text-xs text-muted-foreground">
-                      {cat.type === "income" ? "inkomsten" : cat.type === "expense" ? "uitgaven" : "transfer"}
+                      {cat.type === "income"
+                        ? "inkomsten"
+                        : cat.type === "expense"
+                        ? "uitgaven"
+                        : "transfer"}
                     </p>
                   </div>
                 </div>
 
                 <div className="flex flex-wrap gap-1.5">
                   {subs.length === 0 ? (
-                    <Badge variant="outline" className="rounded-lg text-xs font-normal text-muted-foreground border-dashed">
+                    <Badge
+                      variant="outline"
+                      className="rounded-lg text-xs font-normal text-muted-foreground border-dashed"
+                    >
                       Geen subcategorieën
                     </Badge>
                   ) : (
                     subs.map((sub) => (
-                      <Badge key={sub.id} variant="secondary" className="rounded-lg text-xs font-normal">
+                      <Badge
+                        key={sub.id}
+                        variant="secondary"
+                        className="rounded-lg text-xs font-normal"
+                      >
                         {sub.name}
                       </Badge>
                     ))
@@ -145,7 +171,15 @@ const Categories = () => {
 
       {selected && (
         <div className="pt-2 flex gap-2">
-          <Button className="rounded-xl" onClick={() => navigate(`/transacties?category=${selected.id}`)}>
+          {/* D4: tijdelijke filter op categorie NAAM (zodat dit werkt met mockdata in Transactions) */}
+          <Button
+            className="rounded-xl"
+            onClick={() =>
+              navigate(
+                `/transacties?category=${encodeURIComponent(selected.name)}`
+              )
+            }
+          >
             Bekijk transacties met deze categorie
           </Button>
         </div>
