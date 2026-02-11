@@ -74,7 +74,12 @@ const Accounts = () => {
           return (
             <Card
               key={acc.id}
+              role="button"
+              tabIndex={0}
               onClick={() => navigate(`/rekeningen/${acc.id}`)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") navigate(`/rekeningen/${acc.id}`);
+              }}
               className={[
                 "border-0 shadow-sm rounded-2xl hover:shadow-md transition-shadow cursor-pointer",
                 isSelected ? "ring-2 ring-primary" : "",
@@ -90,6 +95,7 @@ const Accounts = () => {
                     <p className="text-xs text-muted-foreground font-mono">{acc.iban ?? "—"}</p>
                   </div>
                 </div>
+
                 <p className="text-2xl font-semibold tabular-nums">
                   €{" "}
                   {((acc.balance_cents ?? 0) / 100).toLocaleString("nl-NL", {
@@ -107,7 +113,9 @@ const Accounts = () => {
         <div className="pt-2">
           <Button
             className="rounded-xl"
-            onClick={() => navigate(`/transacties?account=${encodeURIComponent(selectedAccount.id)}`)}
+            onClick={() =>
+              navigate(`/transacties?account=${encodeURIComponent(selectedAccount.id)}`)
+            }
           >
             Bekijk transacties van deze rekening
           </Button>
