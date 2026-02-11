@@ -10,7 +10,6 @@ import { AuthGate } from "@/components/AuthGate";
 import Dashboard from "./pages/Dashboard";
 import Transactions from "./pages/Transactions";
 import Budgets from "./pages/Budgets";
-import BudgetDetail from "./pages/BudgetDetail";
 import Categories from "./pages/Categories";
 import Accounts from "./pages/Accounts";
 import SettingsPage from "./pages/SettingsPage";
@@ -28,21 +27,13 @@ const App = () => (
           <AppLayout>
             <Routes>
               <Route path="/" element={<Dashboard />} />
-
               <Route path="/transacties" element={<Transactions />} />
-
               <Route path="/budgetten" element={<Budgets />} />
-              {/* detail: /budgetten/2026-02-01/<categoryId> */}
-              <Route path="/budgetten/:periodStart/:categoryId" element={<BudgetDetail />} />
-
               <Route path="/categorieen" element={<Categories />} />
               <Route path="/categorieen/:id" element={<Categories />} />
-
               <Route path="/rekeningen" element={<Accounts />} />
               <Route path="/rekeningen/:id" element={<Accounts />} />
-
               <Route path="/instellingen" element={<SettingsPage />} />
-
               <Route path="*" element={<NotFound />} />
             </Routes>
           </AppLayout>
