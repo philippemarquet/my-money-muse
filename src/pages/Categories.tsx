@@ -118,7 +118,12 @@ const Categories = () => {
           return (
             <Card
               key={cat.id}
+              role="button"
+              tabIndex={0}
               onClick={() => navigate(`/categorieen/${cat.id}`)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") navigate(`/categorieen/${cat.id}`);
+              }}
               className={[
                 "border-0 shadow-sm rounded-2xl hover:shadow-md transition-shadow cursor-pointer",
                 isSelected ? "ring-2 ring-primary" : "",
@@ -178,7 +183,9 @@ const Categories = () => {
         <div className="pt-2 flex gap-2">
           <Button
             className="rounded-xl"
-            onClick={() => navigate(`/transacties?category=${encodeURIComponent(selected.id)}`)}
+            onClick={() =>
+              navigate(`/transacties?category=${encodeURIComponent(selected.id)}`)
+            }
           >
             Bekijk transacties met deze categorie
           </Button>
