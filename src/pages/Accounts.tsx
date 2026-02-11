@@ -37,7 +37,6 @@ const Accounts = () => {
     [accounts, accountId],
   );
 
-  // Simple detail view: toont dezelfde cards, maar highlight de gekozen rekening
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
@@ -104,9 +103,14 @@ const Accounts = () => {
 
       {selectedAccount && (
         <div className="pt-2">
+          {/* D4: tijdelijke filter op account NAAM (zodat dit werkt met mockdata in Transactions) */}
           <Button
             className="rounded-xl"
-            onClick={() => navigate(`/transacties?account=${selectedAccount.id}`)}
+            onClick={() =>
+              navigate(
+                `/transacties?account=${encodeURIComponent(selectedAccount.name)}`
+              )
+            }
           >
             Bekijk transacties van deze rekening
           </Button>
