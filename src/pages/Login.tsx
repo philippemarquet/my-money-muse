@@ -7,15 +7,19 @@ import { Button } from "@/components/ui/button";
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
 
   async function signIn(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
+    setInfo(null);
 
     const { error } = await supabase.auth.signInWithPassword({ email, password });
+
     setBusy(false);
     if (error) setError(error.message);
   }
@@ -23,14 +27,33 @@ export default function Login() {
   async function signUp() {
     setBusy(true);
     setError(null);
+    setInfo(null);
 
     const { data, error } = await supabase.auth.signUp({ email, password });
-    if (!error && data.user) {
-      // profile upsert
-      await supabase.from("profiles").upsert({ id: data.user.id, email });
+
+    if (error) {
+      setBusy(false);
+      setError(error.message);
+      return;
     }
+
+    // Als email confirm aanstaat kan user nog null sessie hebben — dat is ok.
+    if (data.user) {
+      const { error: upsertError } = await supabase
+        .from("profiles")
+        .upsert({ id: data.user.id, email });
+
+      if (upsertError) {
+        // Niet hard falen, maar toon wel melding
+        setInfo("Account gemaakt, maar profile upsert faalde. Dat kan later alsnog.");
+      } else {
+        setInfo("Account gemaakt. Als e-mail bevestiging aanstaat: check je inbox.");
+      }
+    } else {
+      setInfo("Account registratie gestart. Als e-mail bevestiging aanstaat: check je inbox.");
+    }
+
     setBusy(false);
-    if (error) setError(error.message);
   }
 
   return (
@@ -60,10 +83,20 @@ export default function Login() {
             />
 
             {error && <p className="text-sm text-destructive">{error}</p>}
+            {info && <p className="text-sm text-muted-foreground">{info}</p>}
 
             <div className="flex gap-2">
-              <Button disabled={busy} type="submit" className="rounded-xl flex-1">Inloggen</Button>
-              <Button disabled={busy} type="button" variant="secondary" className="rounded-xl" onClick={signUp}>
+              <Button disabled={busy} type="submit" className="rounded-xl flex-1">
+                {busy ? "Bezig…" : "Inloggen"}
+              </Button>
+
+              <Button
+                disabled={busy}
+                type="button"
+                variant="secondary"
+                className="rounded-xl"
+                onClick={signUp}
+              >
                 Registreren
               </Button>
             </div>
