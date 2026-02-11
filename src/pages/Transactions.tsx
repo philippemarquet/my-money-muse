@@ -1,10 +1,14 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabase";
+
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Search, Filter, Pencil } from "lucide-react";
+
 import {
   Select,
   SelectContent,
@@ -12,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
 import {
   Dialog,
   DialogContent,
@@ -20,107 +25,197 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+
 import { Textarea } from "@/components/ui/textarea";
 
-type Tx = {
-  id: number;
-  datum: string; // YYYY-MM-DD
-  omschrijving: string;
-  bedrag: number;
-  iban: string;
-  rekening: string; // straks account.name
-  alias: string;
-  categorie: string | null; // straks category.name
-  notitie?: string | null;
+type FilterMode = "alle" | "zonder" | "inkomsten" | "uitgaven";
+
+type CategoryOption = {
+  id: string;
+  name: string;
+  type: "income" | "expense" | "transfer";
 };
 
-const mockTransactions: Tx[] = [
-  { id: 1, datum: "2025-02-10", omschrijving: "Albert Heijn", bedrag: -67.43, iban: "NL91BUNQ0123456789", rekening: "Gezamenlijk", alias: "Albert Heijn Utrecht", categorie: "Boodschappen", notitie: null },
-  { id: 2, datum: "2025-02-09", omschrijving: "Salaris Februari", bedrag: 3850.0, iban: "NL20INGB0001234567", rekening: "Gezamenlijk", alias: "Werkgever BV", categorie: "Salaris", notitie: "Bonus inbegrepen" },
-  { id: 3, datum: "2025-02-08", omschrijving: "Shell Tankstation", bedrag: -58.2, iban: "NL44RABO0987654321", rekening: "Privé", alias: "Shell Express", categorie: null, notitie: null },
-  { id: 4, datum: "2025-02-07", omschrijving: "Netflix", bedrag: -15.49, iban: "NL55BUNQ1122334455", rekening: "Gezamenlijk", alias: "Netflix", categorie: "Entertainment", notitie: null },
-  { id: 5, datum: "2025-02-06", omschrijving: "Hypotheek", bedrag: -1245.0, iban: "NL66ABNA5566778899", rekening: "Gezamenlijk", alias: "Rabobank Hypotheek", categorie: "Wonen", notitie: "Maandelijkse afschrijving" },
-  { id: 6, datum: "2025-02-05", omschrijving: "Bol.com", bedrag: -34.99, iban: "NL77BUNQ9988776655", rekening: "Privé", alias: "Bol.com", categorie: null, notitie: null },
-  { id: 7, datum: "2025-02-04", omschrijving: "Freelance project", bedrag: 1200.0, iban: "NL88INGB4433221100", rekening: "Zakelijk", alias: "Klant BV", categorie: "Inkomsten", notitie: null },
-  { id: 8, datum: "2025-02-03", omschrijving: "Jumbo", bedrag: -42.15, iban: "NL99RABO1122334455", rekening: "Gezamenlijk", alias: "Jumbo Supermarkt", categorie: "Boodschappen", notitie: null },
-];
+type AccountInfo = {
+  id: string;
+  name: string;
+  iban: string | null;
+};
 
-// Voor de dialog dropdown (mock). In stap E komt dit uit Supabase.
-const mockCategoryOptions = [
-  "Wonen",
-  "Boodschappen",
-  "Transport",
-  "Entertainment",
-  "Inkomsten",
-  "Salaris",
-];
+type TransactionRow = {
+  id: string;
+  booking_date: string; // YYYY-MM-DD
+  amount_cents: number;
+  currency: string;
+  description: string | null;
+  merchant: string | null;
+  counterparty: string | null;
+  note: string | null;
+  account_id: string;
+  category_id: string | null;
+
+  account: AccountInfo | null;
+  category: { id: string; name: string } | null;
+};
+
+function formatMoney(cents: number) {
+  const abs = Math.abs(cents) / 100;
+  return abs.toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function guessTitle(t: TransactionRow) {
+  return (
+    t.description?.trim() ||
+    t.merchant?.trim() ||
+    t.counterparty?.trim() ||
+    "Transactie"
+  );
+}
+
+function guessAlias(t: TransactionRow) {
+  return t.merchant?.trim() || t.counterparty?.trim() || "—";
+}
 
 const Transactions = () => {
+  const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
 
-  // URL filters (komen van Accounts/Categories knoppen)
-  const accountParam = searchParams.get("account");   // later uuid
-  const categoryParam = searchParams.get("category"); // later uuid
+  // UUID filters via URL (van Accounts/Categories)
+  const accountParam = searchParams.get("account");   // uuid
+  const categoryParam = searchParams.get("category"); // uuid
 
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<"alle" | "zonder" | "inkomsten" | "uitgaven">("alle");
+  const [filter, setFilter] = useState<FilterMode>("alle");
 
-  // Detail dialog state
+  // Dialog state
   const [open, setOpen] = useState(false);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // Editable fields (mock local)
-  const [draftCategory, setDraftCategory] = useState<string | null>(null);
+  // Editable fields
+  const [draftCategoryId, setDraftCategoryId] = useState<string | null>(null);
   const [draftNote, setDraftNote] = useState<string>("");
 
-  // In D werken we nog met mockdata, maar maken het gedrag alvast netjes.
-  const [rows, setRows] = useState<Tx[]>(mockTransactions);
+  // Categories for dropdown
+  const { data: categories = [], isLoading: categoriesLoading } = useQuery({
+    queryKey: ["categories-options"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("categories")
+        .select("id,name,type")
+        .eq("archived", false)
+        .order("sort_order", { ascending: true })
+        .order("name", { ascending: true });
 
-  const selectedTx = useMemo(
-    () => rows.find((r) => r.id === selectedId) ?? null,
-    [rows, selectedId],
+      if (error) throw error;
+      return (data ?? []) as CategoryOption[];
+    },
+  });
+
+  // Transactions query
+  const txQueryKey = useMemo(
+    () => ["transactions", { accountParam, categoryParam, filter }],
+    [accountParam, categoryParam, filter],
   );
 
-  // Filter + search (account/category param zijn nu name-based, straks uuid-based)
+  const { data: transactions = [], isLoading: txLoading, error: txError } = useQuery({
+    queryKey: txQueryKey,
+    queryFn: async () => {
+      // Base query
+      let q = supabase
+        .from("transactions")
+        .select(
+          `
+          id,
+          booking_date,
+          amount_cents,
+          currency,
+          description,
+          merchant,
+          counterparty,
+          note,
+          account_id,
+          category_id,
+          account:accounts(id,name,iban),
+          category:categories(id,name)
+        `
+        )
+        .order("booking_date", { ascending: false });
+
+      // Apply URL filters
+      if (accountParam) q = q.eq("account_id", accountParam);
+      if (categoryParam) q = q.eq("category_id", categoryParam);
+
+      // Apply filter mode server-side where possible
+      if (filter === "zonder") q = q.is("category_id", null);
+      if (filter === "inkomsten") q = q.gt("amount_cents", 0);
+      if (filter === "uitgaven") q = q.lt("amount_cents", 0);
+
+      const { data, error } = await q;
+      if (error) throw error;
+
+      return (data ?? []) as TransactionRow[];
+    },
+  });
+
+  const selectedTx = useMemo(
+    () => transactions.find((t) => t.id === selectedId) ?? null,
+    [transactions, selectedId],
+  );
+
+  // Client-side search (description/merchant/counterparty)
   const filtered = useMemo(() => {
-    return rows.filter((t) => {
-      const matchesSearch =
-        t.omschrijving.toLowerCase().includes(search.toLowerCase()) ||
-        t.alias.toLowerCase().includes(search.toLowerCase());
+    if (!search.trim()) return transactions;
 
-      const matchesFilter =
-        filter === "alle" ? true :
-        filter === "zonder" ? t.categorie === null :
-        filter === "inkomsten" ? t.bedrag > 0 :
-        filter === "uitgaven" ? t.bedrag < 0 : true;
+    const s = search.trim().toLowerCase();
+    return transactions.filter((t) => {
+      const hay = [
+        t.description ?? "",
+        t.merchant ?? "",
+        t.counterparty ?? "",
+        t.note ?? "",
+        t.category?.name ?? "",
+        t.account?.name ?? "",
+      ]
+        .join(" ")
+        .toLowerCase();
 
-      // Voor D: accountParam/categoryParam komen straks als uuid.
-      // Nu gebruiken we ze “best effort” op naam, zodat je flow al werkt in de UI.
-      const matchesAccount = accountParam ? t.rekening === accountParam : true;
-      const matchesCategory = categoryParam ? t.categorie === categoryParam : true;
-
-      return matchesSearch && matchesFilter && matchesAccount && matchesCategory;
+      return hay.includes(s);
     });
-  }, [rows, search, filter, accountParam, categoryParam]);
+  }, [transactions, search]);
 
-  function openDialog(tx: Tx) {
+  const updateTxMutation = useMutation({
+    mutationFn: async (args: { id: string; category_id: string | null; note: string | null }) => {
+      const { error } = await supabase
+        .from("transactions")
+        .update({
+          category_id: args.category_id,
+          note: args.note,
+        })
+        .eq("id", args.id);
+
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      setOpen(false);
+    },
+  });
+
+  function openDialog(tx: TransactionRow) {
     setSelectedId(tx.id);
-    setDraftCategory(tx.categorie);
-    setDraftNote(tx.notitie ?? "");
+    setDraftCategoryId(tx.category_id);
+    setDraftNote(tx.note ?? "");
     setOpen(true);
   }
 
   function saveDialog() {
     if (!selectedTx) return;
 
-    setRows((prev) =>
-      prev.map((t) =>
-        t.id === selectedTx.id
-          ? { ...t, categorie: draftCategory, notitie: draftNote.trim() ? draftNote.trim() : null }
-          : t
-      )
-    );
-    setOpen(false);
+    updateTxMutation.mutate({
+      id: selectedTx.id,
+      category_id: draftCategoryId,
+      note: draftNote.trim() ? draftNote.trim() : null,
+    });
   }
 
   return (
@@ -142,7 +237,7 @@ const Transactions = () => {
           />
         </div>
 
-        <Select value={filter} onValueChange={(v) => setFilter(v as any)}>
+        <Select value={filter} onValueChange={(v) => setFilter(v as FilterMode)}>
           <SelectTrigger className="w-[180px] rounded-xl border-0 bg-card shadow-sm">
             <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
             <SelectValue />
@@ -156,53 +251,75 @@ const Transactions = () => {
         </Select>
       </div>
 
+      {/* State */}
+      {txLoading && <p className="text-muted-foreground">Laden…</p>}
+      {txError && (
+        <p className="text-sm text-destructive">
+          Fout bij laden van transacties: {(txError as any)?.message ?? "onbekend"}
+        </p>
+      )}
+
       {/* Transaction list */}
       <div className="space-y-2">
-        {filtered.map((t) => (
-          <Card
-            key={t.id}
-            onClick={() => openDialog(t)}
-            className="border-0 shadow-sm rounded-2xl hover:shadow-md transition-shadow cursor-pointer"
-          >
-            <CardContent className="p-4 flex items-center justify-between gap-4">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="font-medium truncate">{t.omschrijving}</p>
-                  {t.categorie ? (
-                    <Badge variant="secondary" className="rounded-lg text-xs font-normal">
-                      {t.categorie}
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline" className="rounded-lg text-xs font-normal text-muted-foreground border-dashed">
-                      Geen categorie
-                    </Badge>
-                  )}
+        {filtered.map((t) => {
+          const title = guessTitle(t);
+          const alias = guessAlias(t);
+          const accountName = t.account?.name ?? "—";
+
+          const isIncome = t.amount_cents > 0;
+
+          return (
+            <Card
+              key={t.id}
+              onClick={() => openDialog(t)}
+              className="border-0 shadow-sm rounded-2xl hover:shadow-md transition-shadow cursor-pointer"
+            >
+              <CardContent className="p-4 flex items-center justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium truncate">{title}</p>
+                    {t.category ? (
+                      <Badge variant="secondary" className="rounded-lg text-xs font-normal">
+                        {t.category.name}
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className="rounded-lg text-xs font-normal text-muted-foreground border-dashed"
+                      >
+                        Geen categorie
+                      </Badge>
+                    )}
+                  </div>
+
+                  <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
+                    <span>{t.booking_date}</span>
+                    <span>{accountName}</span>
+                    <span className="truncate">{alias}</span>
+                    {t.note ? <span className="truncate">• {t.note}</span> : null}
+                  </div>
                 </div>
 
-                <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
-                  <span>{t.datum}</span>
-                  <span>{t.rekening}</span>
-                  <span className="truncate">{t.alias}</span>
-                  {t.notitie ? <span className="truncate">• {t.notitie}</span> : null}
+                <div className="flex items-center gap-3">
+                  <p
+                    className={[
+                      "font-semibold tabular-nums whitespace-nowrap",
+                      isIncome ? "text-income" : "text-expense",
+                    ].join(" ")}
+                  >
+                    {isIncome ? "+" : ""}€ {formatMoney(t.amount_cents)}
+                  </p>
+                  <div className="rounded-xl bg-secondary p-2 text-muted-foreground">
+                    <Pencil className="h-4 w-4" />
+                  </div>
                 </div>
-              </div>
+              </CardContent>
+            </Card>
+          );
+        })}
 
-              <div className="flex items-center gap-3">
-                <p className={`font-semibold tabular-nums whitespace-nowrap ${t.bedrag >= 0 ? "text-income" : "text-expense"}`}>
-                  {t.bedrag >= 0 ? "+" : ""}€ {Math.abs(t.bedrag).toFixed(2)}
-                </p>
-                <div className="rounded-xl bg-secondary p-2 text-muted-foreground">
-                  <Pencil className="h-4 w-4" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-
-        {filtered.length === 0 && (
-          <div className="text-center text-muted-foreground py-10">
-            Geen transacties gevonden.
-          </div>
+        {!txLoading && filtered.length === 0 && (
+          <div className="text-center text-muted-foreground py-10">Geen transacties gevonden.</div>
         )}
       </div>
 
@@ -211,9 +328,7 @@ const Transactions = () => {
         <DialogContent className="max-w-xl">
           <DialogHeader>
             <DialogTitle>Transactie bewerken</DialogTitle>
-            <DialogDescription>
-              Voeg een notitie toe en wijs een categorie toe.
-            </DialogDescription>
+            <DialogDescription>Voeg een notitie toe en wijs een categorie toe.</DialogDescription>
           </DialogHeader>
 
           {selectedTx && (
@@ -221,17 +336,23 @@ const Transactions = () => {
               <div className="rounded-2xl bg-card p-4 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="font-medium truncate">{selectedTx.omschrijving}</p>
+                    <p className="font-medium truncate">{guessTitle(selectedTx)}</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {selectedTx.datum} • {selectedTx.rekening} • {selectedTx.alias}
+                      {selectedTx.booking_date} • {selectedTx.account?.name ?? "—"} •{" "}
+                      {guessAlias(selectedTx)}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1 font-mono">
-                      {selectedTx.iban}
+                      {selectedTx.account?.iban ?? "—"}
                     </p>
                   </div>
 
-                  <p className={`font-semibold tabular-nums whitespace-nowrap ${selectedTx.bedrag >= 0 ? "text-income" : "text-expense"}`}>
-                    {selectedTx.bedrag >= 0 ? "+" : ""}€ {Math.abs(selectedTx.bedrag).toFixed(2)}
+                  <p
+                    className={[
+                      "font-semibold tabular-nums whitespace-nowrap",
+                      selectedTx.amount_cents > 0 ? "text-income" : "text-expense",
+                    ].join(" ")}
+                  >
+                    {selectedTx.amount_cents > 0 ? "+" : ""}€ {formatMoney(selectedTx.amount_cents)}
                   </p>
                 </div>
               </div>
@@ -239,17 +360,18 @@ const Transactions = () => {
               <div className="space-y-2">
                 <p className="text-sm font-medium">Categorie</p>
                 <Select
-                  value={draftCategory ?? "geen"}
-                  onValueChange={(v) => setDraftCategory(v === "geen" ? null : v)}
+                  value={draftCategoryId ?? "geen"}
+                  onValueChange={(v) => setDraftCategoryId(v === "geen" ? null : v)}
+                  disabled={categoriesLoading}
                 >
                   <SelectTrigger className="rounded-xl border-0 bg-card shadow-sm">
                     <SelectValue placeholder="Kies categorie" />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl border-0 shadow-lg">
                     <SelectItem value="geen">Geen categorie</SelectItem>
-                    {mockCategoryOptions.map((c) => (
-                      <SelectItem key={c} value={c}>
-                        {c}
+                    {categories.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -268,12 +390,18 @@ const Transactions = () => {
             </div>
           )}
 
+          {updateTxMutation.isError && (
+            <p className="text-sm text-destructive mt-3">
+              Opslaan mislukt: {(updateTxMutation.error as any)?.message ?? "onbekend"}
+            </p>
+          )}
+
           <DialogFooter className="mt-6">
             <Button variant="secondary" className="rounded-xl" onClick={() => setOpen(false)}>
               Annuleren
             </Button>
-            <Button className="rounded-xl" onClick={saveDialog}>
-              Opslaan
+            <Button className="rounded-xl" onClick={saveDialog} disabled={updateTxMutation.isPending}>
+              {updateTxMutation.isPending ? "Opslaan…" : "Opslaan"}
             </Button>
           </DialogFooter>
         </DialogContent>
