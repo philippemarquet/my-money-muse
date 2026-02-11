@@ -19,7 +19,7 @@ const Accounts = () => {
   const params = useParams();
   const accountId = params.id ?? null;
 
-  const { data: accounts = [], isLoading } = useQuery({
+  const { data: accounts = [], isLoading, error } = useQuery({
     queryKey: ["accounts"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -61,6 +61,11 @@ const Accounts = () => {
       </div>
 
       {isLoading && <p className="text-muted-foreground">Laden…</p>}
+      {error && (
+        <p className="text-sm text-destructive">
+          Fout bij laden van rekeningen: {(error as any)?.message ?? "onbekend"}
+        </p>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {accounts.map((acc) => {
@@ -82,12 +87,9 @@ const Accounts = () => {
                   </div>
                   <div>
                     <h3 className="font-medium">{acc.name}</h3>
-                    <p className="text-xs text-muted-foreground font-mono">
-                      {acc.iban ?? "—"}
-                    </p>
+                    <p className="text-xs text-muted-foreground font-mono">{acc.iban ?? "—"}</p>
                   </div>
                 </div>
-
                 <p className="text-2xl font-semibold tabular-nums">
                   €{" "}
                   {((acc.balance_cents ?? 0) / 100).toLocaleString("nl-NL", {
@@ -103,14 +105,9 @@ const Accounts = () => {
 
       {selectedAccount && (
         <div className="pt-2">
-          {/* D4: tijdelijke filter op account NAAM (zodat dit werkt met mockdata in Transactions) */}
           <Button
             className="rounded-xl"
-            onClick={() =>
-              navigate(
-                `/transacties?account=${encodeURIComponent(selectedAccount.name)}`
-              )
-            }
+            onClick={() => navigate(`/transacties?account=${encodeURIComponent(selectedAccount.id)}`)}
           >
             Bekijk transacties van deze rekening
           </Button>
