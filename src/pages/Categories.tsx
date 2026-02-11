@@ -42,7 +42,7 @@ const Categories = () => {
   const params = useParams();
   const categoryId = params.id ?? null;
 
-  const { data: categories = [], isLoading } = useQuery({
+  const { data: categories = [], isLoading, error } = useQuery({
     queryKey: ["categories"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -103,6 +103,11 @@ const Categories = () => {
       </div>
 
       {isLoading && <p className="text-muted-foreground">Laden…</p>}
+      {error && (
+        <p className="text-sm text-destructive">
+          Fout bij laden van categorieën: {(error as any)?.message ?? "onbekend"}
+        </p>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {viewParents.map((cat) => {
@@ -171,14 +176,9 @@ const Categories = () => {
 
       {selected && (
         <div className="pt-2 flex gap-2">
-          {/* D4: tijdelijke filter op categorie NAAM (zodat dit werkt met mockdata in Transactions) */}
           <Button
             className="rounded-xl"
-            onClick={() =>
-              navigate(
-                `/transacties?category=${encodeURIComponent(selected.name)}`
-              )
-            }
+            onClick={() => navigate(`/transacties?category=${encodeURIComponent(selected.id)}`)}
           >
             Bekijk transacties met deze categorie
           </Button>
