@@ -3,10 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-
 import { AppLayout } from "@/components/AppLayout";
-import { AuthGate } from "@/components/AuthGate";
-
 import Dashboard from "./pages/Dashboard";
 import Transactions from "./pages/Transactions";
 import Budgets from "./pages/Budgets";
@@ -23,21 +20,17 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <AuthGate>
-          <AppLayout>
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/transacties" element={<Transactions />} />
-              <Route path="/budgetten" element={<Budgets />} />
-              <Route path="/categorieen" element={<Categories />} />
-              <Route path="/categorieen/:id" element={<Categories />} />
-              <Route path="/rekeningen" element={<Accounts />} />
-              <Route path="/rekeningen/:id" element={<Accounts />} />
-              <Route path="/instellingen" element={<SettingsPage />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </AppLayout>
-        </AuthGate>
+        <AppLayout>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/transacties" element={<Transactions />} />
+            <Route path="/budgetten" element={<Budgets />} />
+            <Route path="/categorieen" element={<Categories />} />
+            <Route path="/rekeningen" element={<Accounts />} />
+            <Route path="/instellingen" element={<SettingsPage />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </AppLayout>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
