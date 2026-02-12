@@ -6,20 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Plus, Trash2 } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { useBudgets, Budget } from "@/hooks/useBudgets";
@@ -28,16 +16,19 @@ import { useTransactions } from "@/hooks/useTransactions";
 import { toast } from "sonner";
 import { MultiSubcategoryPicker } from "@/components/MultiSubcategoryPicker";
 import type { SubPick } from "@/components/SubcategoryPicker";
+import { useSpace } from "@/hooks/useSpace";
 
 const Budgets = () => {
   const { data: budgets = [], create, update, remove } = useBudgets();
   const { data: categories = [] } = useCategories();
   const { data: transactions = [] } = useTransactions();
+  const { spaces, selectedSpaceId, effectiveSpaceId } = useSpace();
 
   const [editing, setEditing] = useState<Budget | null>(null);
   const [showAdd, setShowAdd] = useState(false);
 
   const [form, setForm] = useState({
+    household_id: "",
     naam: "",
     bedrag: "",
     type: "maandelijks" as "maandelijks" | "jaarlijks",
@@ -48,6 +39,7 @@ const Budgets = () => {
 
   const resetForm = () =>
     setForm({
+      household_id: selectedSpaceId === null ? (effectiveSpaceId ?? "") : (selectedSpaceId ?? effectiveSpaceId ?? ""),
       naam: "",
       bedrag: "",
       type: "maandelijks",
@@ -81,29 +73,34 @@ const Budgets = () => {
 
   const openEdit = (b: Budget) => {
     setForm({
+      household_id: b.household_id,
       naam: b.naam,
       bedrag: String(b.bedrag),
       type: b.type,
       richting: b.richting,
       rollover: b.rollover,
-      subcategory_ids:
-        b.budget_categories
-          ?.map((bc) => bc.subcategory_id)
-          .filter(Boolean) as string[] ?? [],
+      subcategory_ids: b.budget_categories?.map((bc) => bc.subcategory_id).filter(Boolean) as string[] ?? [],
     });
     setEditing(b);
   };
 
   const handleSave = async () => {
     try {
-      const payload: any = {
-        naam: form.naam,
+      const household_id = form.household_id || effectiveSpaceId || "";
+      if (!household_id) return toast.error("Kies een space");
+
+      const payload = {
+        household_id,
+        naam: form.naam.trim(),
         bedrag: parseFloat(form.bedrag),
         type: form.type,
         richting: form.richting,
         rollover: form.rollover,
         subcategory_ids: form.subcategory_ids,
       };
+
+      if (!payload.naam) return toast.error("Naam is verplicht");
+      if (!Number.isFinite(payload.bedrag)) return toast.error("Bedrag is verplicht");
 
       if (editing) {
         await update.mutateAsync({ id: editing.id, ...payload });
@@ -122,11 +119,7 @@ const Budgets = () => {
   };
 
   const getSpent = (b: Budget) => {
-    const subIds =
-      b.budget_categories
-        ?.map((bc) => bc.subcategory_id)
-        .filter(Boolean) as string[] ?? [];
-
+    const subIds = b.budget_categories?.map((bc) => bc.subcategory_id).filter(Boolean) as string[] ?? [];
     if (subIds.length === 0) return 0;
 
     const now = new Date();
@@ -150,10 +143,9 @@ const Budgets = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-serif font-semibold">Budgetten</h1>
-          <p className="text-muted-foreground mt-1">
-            Budgetten werken op subcategorie-niveau (cat is groepering)
-          </p>
+          <p className="text-muted-foreground mt-1">Budgetten werken op subcategorie-niveau</p>
         </div>
+
         <Button
           onClick={() => {
             resetForm();
@@ -195,23 +187,17 @@ const Budgets = () => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="font-medium">{b.naam}</h3>
-                    <Badge variant="secondary" className="rounded-lg text-xs font-normal">
-                      {b.type}
-                    </Badge>
+                    <Badge variant="secondary" className="rounded-lg text-xs font-normal">{b.type}</Badge>
                     <Badge
                       variant="outline"
                       className={`rounded-lg text-xs font-normal ${
-                        b.richting === "inkomsten"
-                          ? "text-income border-income/30"
-                          : "text-expense border-expense/30"
+                        b.richting === "inkomsten" ? "text-income border-income/30" : "text-expense border-expense/30"
                       }`}
                     >
                       {b.richting}
                     </Badge>
                     {b.rollover && (
-                      <Badge variant="outline" className="rounded-lg text-xs font-normal">
-                        rollover
-                      </Badge>
+                      <Badge variant="outline" className="rounded-lg text-xs font-normal">rollover</Badge>
                     )}
                   </div>
 
@@ -233,10 +219,7 @@ const Budgets = () => {
                   </div>
                 </div>
 
-                <Progress
-                  value={Math.min(pct, 100)}
-                  className={`h-2 rounded-full ${over ? "[&>div]:bg-expense" : "[&>div]:bg-primary"}`}
-                />
+                <Progress value={Math.min(pct, 100)} className={`h-2 rounded-full ${over ? "[&>div]:bg-expense" : "[&>div]:bg-primary"}`} />
 
                 <div className="flex justify-between text-sm text-muted-foreground">
                   <span>€ {spent.toFixed(2)} besteed</span>
@@ -273,32 +256,38 @@ const Budgets = () => {
           </DialogHeader>
 
           <div className="space-y-4">
+            {selectedSpaceId === null && (
+              <div className="space-y-2">
+                <Label>Space</Label>
+                <Select value={form.household_id} onValueChange={(v) => setForm({ ...form, household_id: v })}>
+                  <SelectTrigger className="rounded-xl">
+                    <SelectValue placeholder="Kies space" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border-0 shadow-lg">
+                    {spaces.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label>Naam</Label>
-              <Input
-                value={form.naam}
-                onChange={(e) => setForm({ ...form, naam: e.target.value })}
-                className="rounded-xl"
-              />
+              <Input value={form.naam} onChange={(e) => setForm({ ...form, naam: e.target.value })} className="rounded-xl" />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Bedrag</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={form.bedrag}
-                  onChange={(e) => setForm({ ...form, bedrag: e.target.value })}
-                  className="rounded-xl"
-                />
+                <Input type="number" step="0.01" value={form.bedrag} onChange={(e) => setForm({ ...form, bedrag: e.target.value })} className="rounded-xl" />
               </div>
               <div className="space-y-2">
                 <Label>Periode</Label>
                 <Select value={form.type} onValueChange={(v) => setForm({ ...form, type: v as any })}>
-                  <SelectTrigger className="rounded-xl">
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
                   <SelectContent className="rounded-xl">
                     <SelectItem value="maandelijks">Maandelijks</SelectItem>
                     <SelectItem value="jaarlijks">Jaarlijks</SelectItem>
@@ -312,13 +301,9 @@ const Budgets = () => {
                 <Label>Richting</Label>
                 <Select
                   value={form.richting}
-                  onValueChange={(v) =>
-                    setForm({ ...form, richting: v as any, subcategory_ids: [] })
-                  }
+                  onValueChange={(v) => setForm({ ...form, richting: v as any, subcategory_ids: [] })}
                 >
-                  <SelectTrigger className="rounded-xl">
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
                   <SelectContent className="rounded-xl">
                     <SelectItem value="uitgaven">Uitgaven</SelectItem>
                     <SelectItem value="inkomsten">Inkomsten</SelectItem>
@@ -343,7 +328,7 @@ const Budgets = () => {
                 placeholder={`Kies subcategorieën (${form.richting})`}
               />
               <p className="text-xs text-muted-foreground">
-                Tip: gebruik de zoekvelden om snel te vinden (categorie links, subcategorie rechts).
+                Tip: je kunt meerdere subcategorieën kiezen.
               </p>
             </div>
           </div>
