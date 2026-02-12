@@ -1,10 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useHousehold } from "./useHousehold";
+import { useSpace } from "@/hooks/useSpace";
 
 export interface Account {
   id: string;
-  household_id: string;
+  household_id: string; // space_id concept
   naam: string;
   rekeningnummer: string;
   alias: string | null;
@@ -14,27 +14,41 @@ export interface Account {
 }
 
 export function useAccounts() {
-  const { householdId } = useHousehold();
+  const { selectedSpaceId, effectiveSpaceId } = useSpace();
   const qc = useQueryClient();
 
   const query = useQuery({
-    queryKey: ["accounts", householdId],
+    queryKey: ["accounts", selectedSpaceId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("accounts")
-        .select("*")
-        .order("naam");
+      let q = supabase.from("accounts").select("*").order("naam", { ascending: true });
+
+      if (selectedSpaceId !== null) {
+        q = q.eq("household_id", selectedSpaceId);
+      }
+
+      const { data, error } = await q;
       if (error) throw error;
       return data as Account[];
     },
-    enabled: !!householdId,
+    enabled: selectedSpaceId === null || !!selectedSpaceId || !!effectiveSpaceId,
   });
 
   const create = useMutation({
-    mutationFn: async (acc: { naam: string; rekeningnummer: string; alias?: string; saldo?: number }) => {
+    mutationFn: async (acc: {
+      naam: string;
+      rekeningnummer: string;
+      alias?: string;
+      saldo?: number;
+    }) => {
+      const spaceId = effectiveSpaceId;
+      if (!spaceId) throw new Error("Geen space geselecteerd");
+
       const { error } = await supabase.from("accounts").insert({
-        household_id: householdId!,
-        ...acc,
+        household_id: spaceId,
+        naam: acc.naam,
+        rekeningnummer: acc.rekeningnummer,
+        alias: acc.alias ?? null,
+        saldo: acc.saldo ?? 0,
       });
       if (error) throw error;
     },
