@@ -4,23 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Landmark, Plus, Trash2 } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { useAccounts, Account } from "@/hooks/useAccounts";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { useAccounts, Account } from "@/hooks/useAccounts";
 import { useSpace } from "@/hooks/useSpace";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const Accounts = () => {
   const { data: accounts = [], create, update, remove } = useAccounts();
@@ -28,6 +16,7 @@ const Accounts = () => {
 
   const [editing, setEditing] = useState<Account | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+
   const [form, setForm] = useState({
     naam: "",
     rekeningnummer: "",
@@ -74,20 +63,9 @@ const Accounts = () => {
         household_id: form.household_id || effectiveSpaceId || "",
       };
 
-      if (!payload.naam) {
-        toast.error("Naam is verplicht");
-        return;
-      }
-
-      if (!payload.rekeningnummer) {
-        toast.error("Rekeningnummer is verplicht");
-        return;
-      }
-
-      if (!payload.household_id) {
-        toast.error("Kies een space");
-        return;
-      }
+      if (!payload.naam) return toast.error("Naam is verplicht");
+      if (!payload.rekeningnummer) return toast.error("Rekeningnummer is verplicht");
+      if (!payload.household_id) return toast.error("Kies een space");
 
       if (editing) {
         await update.mutateAsync({
@@ -113,8 +91,8 @@ const Accounts = () => {
       setEditing(null);
       setShowAdd(false);
       resetForm();
-    } catch (err: any) {
-      toast.error(err.message ?? "Fout bij opslaan");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Opslaan mislukt");
     }
   };
 
@@ -124,7 +102,7 @@ const Accounts = () => {
       await update.mutateAsync({ id: acc.id, household_id: newSpaceId });
       toast.success("Rekening verplaatst");
     } catch (e: any) {
-      toast.error(e.message ?? "Fout bij verplaatsen");
+      toast.error(e?.message ?? "Verplaatsen mislukt");
     }
   };
 
@@ -134,7 +112,7 @@ const Accounts = () => {
       await remove.mutateAsync(acc.id);
       toast.success("Rekening verwijderd");
     } catch (e: any) {
-      toast.error(e.message ?? "Fout bij verwijderen");
+      toast.error(e?.message ?? "Verwijderen mislukt");
     }
   };
 
@@ -144,10 +122,10 @@ const Accounts = () => {
         <div>
           <h1 className="text-2xl font-serif font-semibold">Rekeningen</h1>
           <p className="text-muted-foreground mt-1">
-            Overzicht van al je bankrekeningen
-            {selectedSpaceId === null ? " (alles)" : ""}
+            Overzicht van al je bankrekeningen{selectedSpaceId === null ? " (alles)" : ""}
           </p>
         </div>
+
         <Button
           onClick={() => {
             resetForm();
@@ -180,9 +158,7 @@ const Accounts = () => {
                   </div>
                   <div className="min-w-0">
                     <h3 className="font-medium truncate">{acc.naam}</h3>
-                    <p className="text-xs text-muted-foreground font-mono truncate">
-                      {acc.rekeningnummer}
-                    </p>
+                    <p className="text-xs text-muted-foreground font-mono truncate">{acc.rekeningnummer}</p>
                   </div>
                 </div>
 
@@ -217,7 +193,6 @@ const Accounts = () => {
                       ))}
                     </SelectContent>
                   </Select>
-
                   <div className="text-[11px] text-muted-foreground mt-1 truncate">
                     {spaceLabelById.get(acc.household_id) ?? "Space"}
                   </div>
@@ -239,9 +214,7 @@ const Accounts = () => {
       >
         <DialogContent className="rounded-2xl border-0 shadow-xl max-w-md">
           <DialogHeader>
-            <DialogTitle className="font-serif">
-              {editing ? "Rekening bewerken" : "Nieuwe rekening"}
-            </DialogTitle>
+            <DialogTitle className="font-serif">{editing ? "Rekening bewerken" : "Nieuwe rekening"}</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4">
@@ -251,7 +224,6 @@ const Accounts = () => {
                 value={form.naam}
                 onChange={(e) => setForm({ ...form, naam: e.target.value })}
                 className="rounded-xl"
-                placeholder="Gezamenlijk"
               />
             </div>
 
@@ -261,7 +233,6 @@ const Accounts = () => {
                 value={form.rekeningnummer}
                 onChange={(e) => setForm({ ...form, rekeningnummer: e.target.value })}
                 className="rounded-xl"
-                placeholder="NL91BUNQ0123456789"
               />
             </div>
 
@@ -282,16 +253,12 @@ const Accounts = () => {
                 value={form.saldo}
                 onChange={(e) => setForm({ ...form, saldo: e.target.value })}
                 className="rounded-xl"
-                placeholder="0.00"
               />
             </div>
 
             <div className="space-y-2">
               <Label>Space</Label>
-              <Select
-                value={form.household_id}
-                onValueChange={(v) => setForm({ ...form, household_id: v })}
-              >
+              <Select value={form.household_id} onValueChange={(v) => setForm({ ...form, household_id: v })}>
                 <SelectTrigger className="rounded-xl">
                   <SelectValue placeholder="Kies space" />
                 </SelectTrigger>
@@ -303,9 +270,8 @@ const Accounts = () => {
                   ))}
                 </SelectContent>
               </Select>
-
               <p className="text-xs text-muted-foreground">
-                Tip: als je bovenin “Alles” gekozen hebt, kies hier expliciet een space.
+                Tip: als je bovenin “Alles” hebt gekozen, kies hier expliciet je space.
               </p>
             </div>
           </div>
