@@ -16,8 +16,10 @@ export interface Transaction {
   notitie: string | null;
   created_at: string;
   updated_at: string;
-  categories?: { naam: string; kleur: string } | null;
+
   accounts?: { naam: string } | null;
+  categories?: { naam: string; kleur: string; type: string } | null;
+  subcategories?: { naam: string; categories: { naam: string; kleur: string; type: string } | null } | null;
 }
 
 export function useTransactions() {
@@ -29,8 +31,9 @@ export function useTransactions() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("transactions")
-        .select("*, categories(naam, kleur), accounts(naam)")
+        .select("*, accounts(naam), categories(naam, kleur, type), subcategories(naam, categories(naam, kleur, type))")
         .order("datum", { ascending: false });
+
       if (error) throw error;
       return data as Transaction[];
     },
@@ -45,7 +48,8 @@ export function useTransactions() {
       iban_tegenrekening?: string;
       alias_tegenrekening?: string;
       account_id?: string;
-      category_id?: string;
+      subcategory_id: string; // ✅ required in UI
+      notitie?: string;
     }) => {
       const { error } = await supabase.from("transactions").insert({
         household_id: householdId!,
@@ -53,7 +57,7 @@ export function useTransactions() {
       });
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["transactions"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["transactions", householdId] }),
   });
 
   const update = useMutation({
@@ -61,7 +65,7 @@ export function useTransactions() {
       const { error } = await supabase.from("transactions").update(updates).eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["transactions"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["transactions", householdId] }),
   });
 
   const remove = useMutation({
@@ -69,7 +73,7 @@ export function useTransactions() {
       const { error } = await supabase.from("transactions").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["transactions"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["transactions", householdId] }),
   });
 
   return { ...query, create, update, remove };
