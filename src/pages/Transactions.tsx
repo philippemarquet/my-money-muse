@@ -1,47 +1,146 @@
 import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, Filter } from "lucide-react";
+import { Search, Filter, Plus, Pencil, Trash2, X } from "lucide-react";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-
-const mockTransactions = [
-  { id: 1, datum: "2025-02-10", omschrijving: "Albert Heijn", bedrag: -67.43, iban: "NL91BUNQ0123456789", rekening: "Gezamenlijk", alias: "Albert Heijn Utrecht", categorie: "Boodschappen" },
-  { id: 2, datum: "2025-02-09", omschrijving: "Salaris Februari", bedrag: 3850.00, iban: "NL20INGB0001234567", rekening: "Gezamenlijk", alias: "Werkgever BV", categorie: "Salaris" },
-  { id: 3, datum: "2025-02-08", omschrijving: "Shell Tankstation", bedrag: -58.20, iban: "NL44RABO0987654321", rekening: "Privé", alias: "Shell Express", categorie: null },
-  { id: 4, datum: "2025-02-07", omschrijving: "Netflix", bedrag: -15.49, iban: "NL55BUNQ1122334455", rekening: "Gezamenlijk", alias: "Netflix", categorie: "Entertainment" },
-  { id: 5, datum: "2025-02-06", omschrijving: "Hypotheek", bedrag: -1245.00, iban: "NL66ABNA5566778899", rekening: "Gezamenlijk", alias: "Rabobank Hypotheek", categorie: "Wonen" },
-  { id: 6, datum: "2025-02-05", omschrijving: "Bol.com", bedrag: -34.99, iban: "NL77BUNQ9988776655", rekening: "Privé", alias: "Bol.com", categorie: null },
-  { id: 7, datum: "2025-02-04", omschrijving: "Freelance project", bedrag: 1200.00, iban: "NL88INGB4433221100", rekening: "Zakelijk", alias: "Klant BV", categorie: "Inkomsten" },
-  { id: 8, datum: "2025-02-03", omschrijving: "Jumbo", bedrag: -42.15, iban: "NL99RABO1122334455", rekening: "Gezamenlijk", alias: "Jumbo Supermarkt", categorie: "Boodschappen" },
-];
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { useTransactions, Transaction } from "@/hooks/useTransactions";
+import { useCategories } from "@/hooks/useCategories";
+import { useAccounts } from "@/hooks/useAccounts";
+import { Checkbox } from "@/components/ui/checkbox";
+import { toast } from "sonner";
 
 const Transactions = () => {
+  const { data: transactions = [], create, update, remove } = useTransactions();
+  const { data: categories = [] } = useCategories();
+  const { data: accounts = [] } = useAccounts();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("alle");
+  const [editing, setEditing] = useState<Transaction | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [bulkCatId, setBulkCatId] = useState("");
 
-  const filtered = mockTransactions.filter((t) => {
-    const matchesSearch = t.omschrijving.toLowerCase().includes(search.toLowerCase()) ||
-      t.alias.toLowerCase().includes(search.toLowerCase());
+  // Form state
+  const [form, setForm] = useState({
+    datum: new Date().toISOString().split("T")[0],
+    omschrijving: "",
+    bedrag: "",
+    iban_tegenrekening: "",
+    alias_tegenrekening: "",
+    account_id: "",
+    category_id: "",
+    notitie: "",
+  });
+
+  const resetForm = () =>
+    setForm({
+      datum: new Date().toISOString().split("T")[0],
+      omschrijving: "",
+      bedrag: "",
+      iban_tegenrekening: "",
+      alias_tegenrekening: "",
+      account_id: "",
+      category_id: "",
+      notitie: "",
+    });
+
+  const openEdit = (t: Transaction) => {
+    setForm({
+      datum: t.datum,
+      omschrijving: t.omschrijving,
+      bedrag: String(t.bedrag),
+      iban_tegenrekening: t.iban_tegenrekening || "",
+      alias_tegenrekening: t.alias_tegenrekening || "",
+      account_id: t.account_id || "",
+      category_id: t.category_id || "",
+      notitie: t.notitie || "",
+    });
+    setEditing(t);
+  };
+
+  const handleSave = async () => {
+    try {
+      const payload = {
+        datum: form.datum,
+        omschrijving: form.omschrijving,
+        bedrag: parseFloat(form.bedrag),
+        iban_tegenrekening: form.iban_tegenrekening || undefined,
+        alias_tegenrekening: form.alias_tegenrekening || undefined,
+        account_id: form.account_id || undefined,
+        category_id: form.category_id || undefined,
+        notitie: form.notitie || undefined,
+      };
+      if (editing) {
+        await update.mutateAsync({ id: editing.id, ...payload });
+        toast.success("Transactie bijgewerkt");
+      } else {
+        await create.mutateAsync(payload);
+        toast.success("Transactie toegevoegd");
+      }
+      setEditing(null);
+      setShowAdd(false);
+      resetForm();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  const handleBulkCategory = async () => {
+    if (!bulkCatId || selected.length === 0) return;
+    try {
+      for (const id of selected) {
+        await update.mutateAsync({ id, category_id: bulkCatId });
+      }
+      toast.success(`${selected.length} transacties gecategoriseerd`);
+      setSelected([]);
+      setBulkCatId("");
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+  };
+
+  const filtered = transactions.filter((t) => {
+    const matchesSearch =
+      t.omschrijving.toLowerCase().includes(search.toLowerCase()) ||
+      (t.alias_tegenrekening || "").toLowerCase().includes(search.toLowerCase());
     const matchesFilter =
-      filter === "alle" ? true :
-      filter === "zonder" ? t.categorie === null :
-      filter === "inkomsten" ? t.bedrag > 0 :
-      filter === "uitgaven" ? t.bedrag < 0 : true;
+      filter === "alle"
+        ? true
+        : filter === "zonder"
+        ? !t.category_id
+        : filter === "inkomsten"
+        ? t.bedrag > 0
+        : filter === "uitgaven"
+        ? t.bedrag < 0
+        : true;
     return matchesSearch && matchesFilter;
   });
 
+  const dialogOpen = showAdd || !!editing;
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-serif font-semibold">Transacties</h1>
-        <p className="text-muted-foreground mt-1">Beheer en categoriseer je transacties</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-serif font-semibold">Transacties</h1>
+          <p className="text-muted-foreground mt-1">Beheer en categoriseer je transacties</p>
+        </div>
+        <Button onClick={() => { resetForm(); setShowAdd(true); }} className="rounded-xl gap-2">
+          <Plus className="h-4 w-4" /> Toevoegen
+        </Button>
       </div>
 
       {/* Filters */}
@@ -69,17 +168,55 @@ const Transactions = () => {
         </Select>
       </div>
 
+      {/* Bulk actions */}
+      {selected.length > 0 && (
+        <Card className="border-0 shadow-sm rounded-2xl bg-primary/5">
+          <CardContent className="p-3 flex items-center gap-3">
+            <span className="text-sm font-medium">{selected.length} geselecteerd</span>
+            <Select value={bulkCatId} onValueChange={setBulkCatId}>
+              <SelectTrigger className="w-[200px] rounded-xl h-9">
+                <SelectValue placeholder="Categorie toewijzen" />
+              </SelectTrigger>
+              <SelectContent className="rounded-xl">
+                {categories.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.naam}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button size="sm" className="rounded-xl" onClick={handleBulkCategory} disabled={!bulkCatId}>
+              Toepassen
+            </Button>
+            <Button size="sm" variant="ghost" className="rounded-xl" onClick={() => setSelected([])}>
+              <X className="h-4 w-4" />
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Transaction list */}
       <div className="space-y-2">
+        {filtered.length === 0 && (
+          <p className="text-center text-muted-foreground py-8">Geen transacties gevonden</p>
+        )}
         {filtered.map((t) => (
-          <Card key={t.id} className="border-0 shadow-sm rounded-2xl hover:shadow-md transition-shadow cursor-pointer">
-            <CardContent className="p-4 flex items-center justify-between">
+          <Card
+            key={t.id}
+            className="border-0 shadow-sm rounded-2xl hover:shadow-md transition-shadow cursor-pointer"
+            onClick={() => openEdit(t)}
+          >
+            <CardContent className="p-4 flex items-center gap-3">
+              <Checkbox
+                checked={selected.includes(t.id)}
+                onCheckedChange={() => toggleSelect(t.id)}
+                onClick={(e) => e.stopPropagation()}
+                className="shrink-0"
+              />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <p className="font-medium truncate">{t.omschrijving}</p>
-                  {t.categorie ? (
+                  {t.categories ? (
                     <Badge variant="secondary" className="rounded-lg text-xs font-normal">
-                      {t.categorie}
+                      {t.categories.naam}
                     </Badge>
                   ) : (
                     <Badge variant="outline" className="rounded-lg text-xs font-normal text-muted-foreground border-dashed">
@@ -89,17 +226,93 @@ const Transactions = () => {
                 </div>
                 <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
                   <span>{t.datum}</span>
-                  <span>{t.rekening}</span>
-                  <span className="truncate">{t.alias}</span>
+                  {t.accounts && <span>{t.accounts.naam}</span>}
+                  {t.alias_tegenrekening && <span className="truncate">{t.alias_tegenrekening}</span>}
                 </div>
               </div>
               <p className={`font-semibold tabular-nums whitespace-nowrap ml-4 ${t.bedrag >= 0 ? "text-income" : "text-expense"}`}>
                 {t.bedrag >= 0 ? "+" : ""}€ {Math.abs(t.bedrag).toFixed(2)}
               </p>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="shrink-0 rounded-xl"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (confirm("Transactie verwijderen?")) {
+                    remove.mutateAsync(t.id).then(() => toast.success("Verwijderd"));
+                  }
+                }}
+              >
+                <Trash2 className="h-4 w-4 text-muted-foreground" />
+              </Button>
             </CardContent>
           </Card>
         ))}
       </div>
+
+      {/* Add/Edit Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) { setEditing(null); setShowAdd(false); } }}>
+        <DialogContent className="rounded-2xl border-0 shadow-xl max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-serif">{editing ? "Transactie bewerken" : "Nieuwe transactie"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Datum</Label>
+                <Input type="date" value={form.datum} onChange={(e) => setForm({ ...form, datum: e.target.value })} className="rounded-xl" />
+              </div>
+              <div className="space-y-2">
+                <Label>Bedrag</Label>
+                <Input type="number" step="0.01" value={form.bedrag} onChange={(e) => setForm({ ...form, bedrag: e.target.value })} className="rounded-xl" placeholder="-67.43" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Omschrijving</Label>
+              <Input value={form.omschrijving} onChange={(e) => setForm({ ...form, omschrijving: e.target.value })} className="rounded-xl" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>IBAN tegenrekening</Label>
+                <Input value={form.iban_tegenrekening} onChange={(e) => setForm({ ...form, iban_tegenrekening: e.target.value })} className="rounded-xl" />
+              </div>
+              <div className="space-y-2">
+                <Label>Alias</Label>
+                <Input value={form.alias_tegenrekening} onChange={(e) => setForm({ ...form, alias_tegenrekening: e.target.value })} className="rounded-xl" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Rekening</Label>
+                <Select value={form.account_id} onValueChange={(v) => setForm({ ...form, account_id: v })}>
+                  <SelectTrigger className="rounded-xl"><SelectValue placeholder="Kies rekening" /></SelectTrigger>
+                  <SelectContent className="rounded-xl">
+                    {accounts.map((a) => <SelectItem key={a.id} value={a.id}>{a.naam}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Categorie</Label>
+                <Select value={form.category_id} onValueChange={(v) => setForm({ ...form, category_id: v })}>
+                  <SelectTrigger className="rounded-xl"><SelectValue placeholder="Kies categorie" /></SelectTrigger>
+                  <SelectContent className="rounded-xl">
+                    {categories.map((c) => <SelectItem key={c.id} value={c.id}>{c.naam}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Notitie</Label>
+              <Textarea value={form.notitie} onChange={(e) => setForm({ ...form, notitie: e.target.value })} className="rounded-xl" rows={2} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" className="rounded-xl" onClick={() => { setEditing(null); setShowAdd(false); }}>Annuleren</Button>
+            <Button className="rounded-xl" onClick={handleSave}>Opslaan</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
