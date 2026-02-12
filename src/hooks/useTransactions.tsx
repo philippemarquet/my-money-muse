@@ -18,8 +18,13 @@ export interface Transaction {
   updated_at: string;
 
   accounts?: { naam: string } | null;
-  categories?: { naam: string; kleur: string; type: string } | null;
-  subcategories?: { naam: string; categories: { naam: string; kleur: string; type: string } | null } | null;
+  categories?: { naam: string; kleur: string; type?: string } | null;
+  subcategories?:
+    | {
+        naam: string;
+        categories?: { naam: string; kleur: string; type?: string } | null;
+      }
+    | null;
 }
 
 export function useTransactions() {
@@ -31,7 +36,9 @@ export function useTransactions() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("transactions")
-        .select("*, accounts(naam), categories(naam, kleur, type), subcategories(naam, categories(naam, kleur, type))")
+        .select(
+          "*, accounts(naam), categories(naam, kleur, type), subcategories(naam, categories(naam, kleur, type))"
+        )
         .order("datum", { ascending: false });
 
       if (error) throw error;
@@ -48,7 +55,7 @@ export function useTransactions() {
       iban_tegenrekening?: string;
       alias_tegenrekening?: string;
       account_id?: string;
-      subcategory_id: string; // ✅ required in UI
+      subcategory_id: string; // verplicht
       notitie?: string;
     }) => {
       const { error } = await supabase.from("transactions").insert({
