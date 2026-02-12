@@ -14,7 +14,13 @@ import {
 import { useAccounts, Account } from "@/hooks/useAccounts";
 import { toast } from "sonner";
 import { useSpace } from "@/hooks/useSpace";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const Accounts = () => {
   const { data: accounts = [], create, update, remove } = useAccounts();
@@ -61,33 +67,46 @@ const Accounts = () => {
   const handleSave = async () => {
     try {
       const payload = {
-        naam: form.naam,
-        rekeningnummer: form.rekeningnummer,
-        alias: form.alias || undefined,
+        naam: form.naam.trim(),
+        rekeningnummer: form.rekeningnummer.trim(),
+        alias: form.alias.trim() ? form.alias.trim() : null,
         saldo: parseFloat(form.saldo) || 0,
-        household_id: form.household_id || effectiveSpaceId, // fallback
+        household_id: form.household_id || effectiveSpaceId || "",
       };
 
+      if (!payload.naam) {
+        toast.error("Naam is verplicht");
+        return;
+      }
+
+      if (!payload.rekeningnummer) {
+        toast.error("Rekeningnummer is verplicht");
+        return;
+      }
+
       if (!payload.household_id) {
-        toast.error("Kies eerst een space");
+        toast.error("Kies een space");
         return;
       }
 
       if (editing) {
-        await update.mutateAsync({ id: editing.id, ...payload });
+        await update.mutateAsync({
+          id: editing.id,
+          naam: payload.naam,
+          rekeningnummer: payload.rekeningnummer,
+          alias: payload.alias,
+          saldo: payload.saldo,
+          household_id: payload.household_id,
+        });
         toast.success("Rekening bijgewerkt");
       } else {
-        // create hook gebruikt effectiveSpaceId; daarom: forceer space door tijdelijk update na create?
-        // Netter: create accepteert household_id niet -> dus we maken hem aan in de huidige space en verplaatsen indien nodig.
         await create.mutateAsync({
           naam: payload.naam,
           rekeningnummer: payload.rekeningnummer,
           alias: payload.alias,
           saldo: payload.saldo,
+          household_id: payload.household_id,
         });
-
-        // Als user in dialog een andere space koos dan current effective: verplaatsen we laatste created account niet betrouwbaar zonder return id.
-        // Daarom: in de praktijk kies je hier gewoon space = huidige. (We houden UI alvast klaar)
         toast.success("Rekening toegevoegd");
       }
 
@@ -95,7 +114,7 @@ const Accounts = () => {
       setShowAdd(false);
       resetForm();
     } catch (err: any) {
-      toast.error(err.message);
+      toast.error(err.message ?? "Fout bij opslaan");
     }
   };
 
@@ -106,6 +125,16 @@ const Accounts = () => {
       toast.success("Rekening verplaatst");
     } catch (e: any) {
       toast.error(e.message ?? "Fout bij verplaatsen");
+    }
+  };
+
+  const handleDelete = async (acc: Account) => {
+    try {
+      if (!confirm(`Rekening "${acc.naam}" verwijderen?`)) return;
+      await remove.mutateAsync(acc.id);
+      toast.success("Rekening verwijderd");
+    } catch (e: any) {
+      toast.error(e.message ?? "Fout bij verwijderen");
     }
   };
 
@@ -163,9 +192,7 @@ const Accounts = () => {
                   className="rounded-xl"
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (confirm("Rekening verwijderen?")) {
-                      remove.mutateAsync(acc.id).then(() => toast.success("Verwijderd"));
-                    }
+                    handleDelete(acc);
                   }}
                 >
                   <Trash2 className="h-4 w-4 text-muted-foreground" />
@@ -177,11 +204,8 @@ const Accounts = () => {
                   € {Number(acc.saldo).toLocaleString("nl-NL", { minimumFractionDigits: 2 })}
                 </p>
 
-                <div className="w-[180px]" onClick={(e) => e.stopPropagation()}>
-                  <Select
-                    value={acc.household_id}
-                    onValueChange={(v) => handleQuickMove(acc, v)}
-                  >
+                <div className="w-[190px]" onClick={(e) => e.stopPropagation()}>
+                  <Select value={acc.household_id} onValueChange={(v) => handleQuickMove(acc, v)}>
                     <SelectTrigger className="rounded-xl border-0 bg-card shadow-sm">
                       <SelectValue placeholder="Space" />
                     </SelectTrigger>
@@ -281,7 +305,7 @@ const Accounts = () => {
               </Select>
 
               <p className="text-xs text-muted-foreground">
-                Tip: als je “Alles” gekozen hebt bovenin, kies hier expliciet de juiste space.
+                Tip: als je bovenin “Alles” gekozen hebt, kies hier expliciet een space.
               </p>
             </div>
           </div>
