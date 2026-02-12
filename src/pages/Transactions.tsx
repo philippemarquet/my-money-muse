@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, Filter, Plus, Trash2, ChevronRight, ChevronLeft } from "lucide-react";
+import { Search, Filter, Plus, Trash2 } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -25,27 +25,8 @@ import { useCategories } from "@/hooks/useCategories";
 import { useAccounts } from "@/hooks/useAccounts";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import * as LucideIcons from "lucide-react";
-
-type SubPick = {
-  sub_id: string;
-  sub_name: string;
-  cat_id: string;
-  cat_name: string;
-  cat_type: "inkomsten" | "uitgaven";
-  cat_color: string;
-  cat_icon?: string;
-};
-
-function getLucideIconByName(name: string | null | undefined) {
-  const key = (name ?? "").trim();
-  const fallback = (LucideIcons as any).Tag as any;
-  const Icon = (LucideIcons as any)[key] as any;
-  return Icon ?? fallback;
-}
+import { SubcategoryPicker, SubPick } from "@/components/SubcategoryPicker";
 
 function alphaBackground(color: string, alpha = 0.14) {
   const c = (color ?? "").trim();
@@ -54,189 +35,6 @@ function alphaBackground(color: string, alpha = 0.14) {
   const hexMatch = c.match(/^#([0-9a-f]{6})$/i);
   if (hexMatch) return `${c}${Math.round(alpha * 255).toString(16).padStart(2, "0")}`;
   return `color-mix(in srgb, ${c} ${Math.round(alpha * 100)}%, transparent)`;
-}
-
-function formatSubLabel(sub: SubPick) {
-  return `${sub.cat_name} — ${sub.sub_name}`;
-}
-
-function SubcategoryPicker({
-  value,
-  onChange,
-  options,
-  placeholder = "Kies subcategorie",
-}: {
-  value: string;
-  onChange: (subId: string) => void;
-  options: SubPick[];
-  placeholder?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const [activeCatId, setActiveCatId] = useState<string | null>(null);
-
-  const selected = useMemo(() => options.find((o) => o.sub_id === value) ?? null, [options, value]);
-
-  const cats = useMemo(() => {
-    const map = new Map<
-      string,
-      {
-        cat_id: string;
-        cat_name: string;
-        cat_type: "inkomsten" | "uitgaven";
-        cat_color: string;
-        cat_icon?: string;
-        count: number;
-      }
-    >();
-    for (const o of options) {
-      if (!map.has(o.cat_id)) {
-        map.set(o.cat_id, {
-          cat_id: o.cat_id,
-          cat_name: o.cat_name,
-          cat_type: o.cat_type,
-          cat_color: o.cat_color,
-          cat_icon: o.cat_icon,
-          count: 0,
-        });
-      }
-      map.get(o.cat_id)!.count += 1;
-    }
-    return Array.from(map.values()).sort((a, b) => a.cat_name.localeCompare(b.cat_name));
-  }, [options]);
-
-  const activeCat = useMemo(() => {
-    if (activeCatId) return cats.find((c) => c.cat_id === activeCatId) ?? null;
-    if (selected) return cats.find((c) => c.cat_id === selected.cat_id) ?? null;
-    return cats[0] ?? null;
-  }, [activeCatId, cats, selected]);
-
-  const subsForActive = useMemo(() => {
-    if (!activeCat) return [];
-    return options
-      .filter((o) => o.cat_id === activeCat.cat_id)
-      .sort((a, b) => a.sub_name.localeCompare(b.sub_name));
-  }, [options, activeCat]);
-
-  const handleOpenChange = (v: boolean) => {
-    setOpen(v);
-    if (v && !activeCatId) {
-      if (selected) setActiveCatId(selected.cat_id);
-      else if (cats[0]) setActiveCatId(cats[0].cat_id);
-    }
-  };
-
-  const TriggerIcon = selected ? getLucideIconByName(selected.cat_icon) : (LucideIcons as any).Tag;
-  const triggerColor = selected?.cat_color ?? "hsl(30, 10%, 50%)";
-
-  return (
-    <Popover open={open} onOpenChange={handleOpenChange}>
-      <PopoverTrigger asChild>
-        <Button type="button" variant="secondary" className="w-full justify-between rounded-xl bg-card shadow-sm border-0">
-          <span className="flex items-center gap-2 min-w-0">
-            <span
-              className="flex h-8 w-8 items-center justify-center rounded-xl shrink-0"
-              style={{ backgroundColor: alphaBackground(triggerColor), color: triggerColor }}
-            >
-              <TriggerIcon className="h-4 w-4" />
-            </span>
-            <span className={cn("truncate", !selected && "text-muted-foreground")}>
-              {selected ? formatSubLabel(selected) : placeholder}
-            </span>
-          </span>
-          <ChevronRight className="h-4 w-4 text-muted-foreground" />
-        </Button>
-      </PopoverTrigger>
-
-      <PopoverContent align="start" className="w-[520px] p-0 rounded-2xl border-0 shadow-xl">
-        <div className="flex">
-          <div className="w-[230px] border-r border-border">
-            <div className="px-3 py-2 text-xs text-muted-foreground">Categorie</div>
-            <ScrollArea className="h-[320px]">
-              <div className="p-2 space-y-1">
-                {cats.map((c) => {
-                  const Icon = getLucideIconByName(c.cat_icon);
-                  const active = activeCat?.cat_id === c.cat_id;
-
-                  return (
-                    <button
-                      key={c.cat_id}
-                      type="button"
-                      onClick={() => setActiveCatId(c.cat_id)}
-                      className={cn(
-                        "w-full flex items-center gap-2 rounded-xl px-2.5 py-2 text-left transition-colors",
-                        active ? "bg-secondary text-foreground" : "hover:bg-secondary/70 text-muted-foreground"
-                      )}
-                    >
-                      <span
-                        className="flex h-8 w-8 items-center justify-center rounded-xl shrink-0"
-                        style={{ backgroundColor: alphaBackground(c.cat_color), color: c.cat_color }}
-                      >
-                        <Icon className="h-4 w-4" />
-                      </span>
-                      <span className="flex-1 min-w-0">
-                        <span className="block truncate text-sm font-medium">{c.cat_name}</span>
-                        <span className="block text-xs text-muted-foreground">{c.count} sub</span>
-                      </span>
-                      <ChevronRight className="h-4 w-4 opacity-50" />
-                    </button>
-                  );
-                })}
-              </div>
-            </ScrollArea>
-          </div>
-
-          <div className="flex-1">
-            <div className="flex items-center justify-between px-3 py-2 border-b border-border">
-              <div className="text-xs text-muted-foreground">
-                {activeCat ? `Subcategorie — ${activeCat.cat_name}` : "Subcategorie"}
-              </div>
-
-              {activeCatId && (
-                <Button type="button" size="sm" variant="ghost" className="rounded-xl" onClick={() => setActiveCatId(null)}>
-                  <ChevronLeft className="h-4 w-4 mr-1" />
-                  Alle
-                </Button>
-              )}
-            </div>
-
-            <ScrollArea className="h-[320px]">
-              <div className="p-2 space-y-1">
-                {subsForActive.length === 0 && (
-                  <div className="p-3 text-sm text-muted-foreground">Geen subcategorieën.</div>
-                )}
-
-                {subsForActive.map((s) => {
-                  const selectedRow = value === s.sub_id;
-
-                  return (
-                    <button
-                      key={s.sub_id}
-                      type="button"
-                      onClick={() => {
-                        onChange(s.sub_id);
-                        setOpen(false);
-                      }}
-                      className={cn(
-                        "w-full flex items-center justify-between rounded-xl px-3 py-2 text-left transition-colors",
-                        selectedRow ? "bg-primary/10" : "hover:bg-secondary/70"
-                      )}
-                    >
-                      <span className="text-sm">{s.sub_name}</span>
-                      {selectedRow && (
-                        <Badge variant="secondary" className="rounded-lg text-xs font-normal">
-                          geselecteerd
-                        </Badge>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </ScrollArea>
-          </div>
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
 }
 
 const Transactions = () => {
@@ -315,7 +113,7 @@ const Transactions = () => {
         return;
       }
 
-      const payload = {
+      const payload: any = {
         datum: form.datum,
         omschrijving: form.omschrijving,
         bedrag: parseFloat(form.bedrag),
@@ -327,10 +125,10 @@ const Transactions = () => {
       };
 
       if (editing) {
-        await update.mutateAsync({ id: editing.id, ...payload } as any);
+        await update.mutateAsync({ id: editing.id, ...payload });
         toast.success("Transactie bijgewerkt");
       } else {
-        await create.mutateAsync(payload as any);
+        await create.mutateAsync(payload);
         toast.success("Transactie toegevoegd");
       }
 
@@ -382,11 +180,6 @@ const Transactions = () => {
 
   const dialogOpen = showAdd || !!editing;
 
-  const selectedLabel = useMemo(() => {
-    const sub = subOptions.find((o) => o.sub_id === form.subcategory_id);
-    return sub ? formatSubLabel(sub) : "";
-  }, [form.subcategory_id, subOptions]);
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -415,6 +208,7 @@ const Transactions = () => {
             className="pl-10 rounded-xl border-0 bg-card shadow-sm"
           />
         </div>
+
         <Select value={filter} onValueChange={setFilter}>
           <SelectTrigger className="w-[200px] rounded-xl border-0 bg-card shadow-sm">
             <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
@@ -431,16 +225,11 @@ const Transactions = () => {
 
       {selected.length > 0 && (
         <Card className="border-0 shadow-sm rounded-2xl bg-primary/5">
-          <CardContent className="p-3 flex items-center gap-3">
+          <CardContent className="p-3 flex flex-col sm:flex-row items-start sm:items-center gap-3">
             <span className="text-sm font-medium">{selected.length} geselecteerd</span>
 
-            <div className="w-[360px]">
-              <SubcategoryPicker
-                value={bulkSubId}
-                onChange={setBulkSubId}
-                options={subOptions}
-                placeholder="Subcategorie toewijzen"
-              />
+            <div className="w-full sm:w-[420px]">
+              <SubcategoryPicker value={bulkSubId} onChange={setBulkSubId} options={subOptions} placeholder="Subcategorie toewijzen" />
             </div>
 
             <Button size="sm" className="rounded-xl" onClick={handleBulkSubcategory} disabled={!bulkSubId}>
@@ -621,7 +410,6 @@ const Transactions = () => {
                 onChange={(subId) => setForm({ ...form, subcategory_id: subId })}
                 options={subOptions}
               />
-              {selectedLabel && <p className="text-xs text-muted-foreground">Gekozen: {selectedLabel}</p>}
             </div>
 
             <div className="space-y-2">
