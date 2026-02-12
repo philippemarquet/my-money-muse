@@ -7,15 +7,22 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { User, Bell, Layers, Plus, Pencil, Trash2, Star } from "lucide-react";
 import { toast } from "sonner";
-import { useSpaces } from "@/hooks/useSpaces";
 import { useSpace } from "@/hooks/useSpace";
 
 const SettingsPage = () => {
-  const { spacesQuery, profileQuery, createSpace, renameSpace, deleteSpace, setDefaultSpace } = useSpaces();
-  const { setSelectedSpaceId } = useSpace();
-
-  const spaces = spacesQuery.data ?? [];
-  const defaultSpaceId = profileQuery.data?.household_id ?? null;
+  const {
+    spaces,
+    defaultSpaceId,
+    setSelectedSpaceId,
+    createSpace,
+    renameSpace,
+    deleteSpace,
+    setDefaultSpace,
+    creating,
+    renaming,
+    deleting,
+    settingDefault,
+  } = useSpace();
 
   const [createOpen, setCreateOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
@@ -45,21 +52,18 @@ const SettingsPage = () => {
   const handleCreate = async () => {
     try {
       const name = newName.trim();
-      if (!name) {
-        toast.error("Geef een naam op voor je space");
-        return;
-      }
+      if (!name) return toast.error("Geef een naam op");
 
-      const id = await createSpace.mutateAsync(name);
+      const id = await createSpace(name);
       toast.success("Space aangemaakt");
 
       setCreateOpen(false);
       setNewName("");
 
-      // meteen switchen naar nieuwe space (logisch UX)
+      // switch direct
       setSelectedSpaceId(id);
     } catch (e: any) {
-      toast.error(e.message ?? "Fout bij aanmaken");
+      toast.error(e?.message ?? "Fout bij aanmaken");
     }
   };
 
@@ -67,39 +71,36 @@ const SettingsPage = () => {
     try {
       if (!activeSpaceId) return;
       const name = renameName.trim();
-      if (!name) {
-        toast.error("Geef een naam op");
-        return;
-      }
+      if (!name) return toast.error("Geef een naam op");
 
-      await renameSpace.mutateAsync({ id: activeSpaceId, name });
+      await renameSpace(activeSpaceId, name);
       toast.success("Space hernoemd");
       setRenameOpen(false);
     } catch (e: any) {
-      toast.error(e.message ?? "Fout bij hernoemen");
+      toast.error(e?.message ?? "Fout bij hernoemen");
     }
   };
 
   const handleDelete = async () => {
     try {
       if (!activeSpaceId) return;
-      await deleteSpace.mutateAsync(activeSpaceId);
+      await deleteSpace(activeSpaceId);
       toast.success("Space verwijderd");
       setDeleteOpen(false);
 
-      // als je net de geselecteerde space verwijdert: ga naar Alles (veilig)
+      // safe fallback
       setSelectedSpaceId(null);
     } catch (e: any) {
-      toast.error(e.message ?? "Fout bij verwijderen");
+      toast.error(e?.message ?? "Fout bij verwijderen");
     }
   };
 
   const handleSetDefault = async (id: string) => {
     try {
-      await setDefaultSpace.mutateAsync(id);
+      await setDefaultSpace(id);
       toast.success("Default space ingesteld");
     } catch (e: any) {
-      toast.error(e.message ?? "Fout bij instellen");
+      toast.error(e?.message ?? "Fout bij instellen");
     }
   };
 
@@ -111,7 +112,6 @@ const SettingsPage = () => {
       </div>
 
       <div className="space-y-4 max-w-3xl">
-        {/* Profiel */}
         <Card className="border-0 shadow-sm rounded-2xl">
           <CardContent className="p-5 flex items-center gap-4">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -121,13 +121,10 @@ const SettingsPage = () => {
               <h3 className="font-medium">Profiel</h3>
               <p className="text-sm text-muted-foreground">Naam, e-mail en avatar aanpassen</p>
             </div>
-            <Badge variant="secondary" className="rounded-lg text-xs font-normal">
-              later
-            </Badge>
+            <Badge variant="secondary" className="rounded-lg text-xs font-normal">later</Badge>
           </CardContent>
         </Card>
 
-        {/* Notificaties */}
         <Card className="border-0 shadow-sm rounded-2xl">
           <CardContent className="p-5 flex items-center gap-4">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/10 text-accent">
@@ -137,13 +134,10 @@ const SettingsPage = () => {
               <h3 className="font-medium">Notificaties</h3>
               <p className="text-sm text-muted-foreground">Meldingen en herinneringen instellen</p>
             </div>
-            <Badge variant="secondary" className="rounded-lg text-xs font-normal">
-              later
-            </Badge>
+            <Badge variant="secondary" className="rounded-lg text-xs font-normal">later</Badge>
           </CardContent>
         </Card>
 
-        {/* Spaces beheer */}
         <Card className="border-0 shadow-sm rounded-2xl">
           <CardContent className="p-5 space-y-4">
             <div className="flex items-center justify-between">
@@ -164,11 +158,7 @@ const SettingsPage = () => {
             </div>
 
             <div className="space-y-2">
-              {spacesQuery.isLoading && (
-                <div className="text-sm text-muted-foreground py-3">Spaces laden...</div>
-              )}
-
-              {!spacesQuery.isLoading && spaces.length === 0 && (
+              {spaces.length === 0 && (
                 <div className="text-sm text-muted-foreground py-3">Nog geen spaces gevonden.</div>
               )}
 
@@ -176,10 +166,7 @@ const SettingsPage = () => {
                 const isDefault = defaultSpaceId === s.id;
 
                 return (
-                  <div
-                    key={s.id}
-                    className="flex items-center justify-between rounded-2xl bg-card shadow-sm px-4 py-3"
-                  >
+                  <div key={s.id} className="flex items-center justify-between rounded-2xl bg-card shadow-sm px-4 py-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <div className="font-medium truncate">{s.name}</div>
@@ -190,9 +177,7 @@ const SettingsPage = () => {
                           </Badge>
                         )}
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        Space ID: <span className="font-mono">{s.id}</span>
-                      </div>
+                      <div className="text-xs text-muted-foreground font-mono truncate">{s.id}</div>
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -200,7 +185,7 @@ const SettingsPage = () => {
                         variant="secondary"
                         className="rounded-xl"
                         onClick={() => handleSetDefault(s.id)}
-                        disabled={isDefault || setDefaultSpace.isPending}
+                        disabled={isDefault || settingDefault}
                       >
                         Default
                       </Button>
@@ -221,7 +206,6 @@ const SettingsPage = () => {
         </Card>
       </div>
 
-      {/* Create dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="rounded-2xl border-0 shadow-xl max-w-md">
           <DialogHeader>
@@ -230,29 +214,20 @@ const SettingsPage = () => {
 
           <div className="space-y-2">
             <Label>Naam</Label>
-            <Input
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              className="rounded-xl"
-              placeholder="Bijv. Gezamenlijk"
-            />
-            <p className="text-xs text-muted-foreground">
-              Tip: maak minimaal “Gezamenlijk” en “Privé”.
-            </p>
+            <Input value={newName} onChange={(e) => setNewName(e.target.value)} className="rounded-xl" placeholder="Bijv. Gezamenlijk" />
           </div>
 
           <DialogFooter>
             <Button variant="outline" className="rounded-xl" onClick={() => setCreateOpen(false)}>
               Annuleren
             </Button>
-            <Button className="rounded-xl" onClick={handleCreate} disabled={createSpace.isPending}>
-              {createSpace.isPending ? "Bezig..." : "Aanmaken"}
+            <Button className="rounded-xl" onClick={handleCreate} disabled={creating}>
+              {creating ? "Bezig..." : "Aanmaken"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Rename dialog */}
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
         <DialogContent className="rounded-2xl border-0 shadow-xl max-w-md">
           <DialogHeader>
@@ -261,26 +236,20 @@ const SettingsPage = () => {
 
           <div className="space-y-2">
             <Label>Naam</Label>
-            <Input
-              value={renameName}
-              onChange={(e) => setRenameName(e.target.value)}
-              className="rounded-xl"
-              placeholder="Nieuwe naam"
-            />
+            <Input value={renameName} onChange={(e) => setRenameName(e.target.value)} className="rounded-xl" />
           </div>
 
           <DialogFooter>
             <Button variant="outline" className="rounded-xl" onClick={() => setRenameOpen(false)}>
               Annuleren
             </Button>
-            <Button className="rounded-xl" onClick={handleRename} disabled={renameSpace.isPending}>
-              {renameSpace.isPending ? "Bezig..." : "Opslaan"}
+            <Button className="rounded-xl" onClick={handleRename} disabled={renaming}>
+              {renaming ? "Bezig..." : "Opslaan"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Delete dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent className="rounded-2xl border-0 shadow-xl max-w-md">
           <DialogHeader>
@@ -288,9 +257,7 @@ const SettingsPage = () => {
           </DialogHeader>
 
           <div className="space-y-2">
-            <p className="text-sm">
-              Weet je zeker dat je deze space wilt verwijderen?
-            </p>
+            <p className="text-sm">Weet je zeker dat je deze space wilt verwijderen?</p>
             {activeSpace && (
               <div className="rounded-xl bg-muted p-3 text-sm">
                 <div className="font-medium">{activeSpace.name}</div>
@@ -306,8 +273,8 @@ const SettingsPage = () => {
             <Button variant="outline" className="rounded-xl" onClick={() => setDeleteOpen(false)}>
               Annuleren
             </Button>
-            <Button variant="destructive" className="rounded-xl" onClick={handleDelete} disabled={deleteSpace.isPending}>
-              {deleteSpace.isPending ? "Bezig..." : "Verwijderen"}
+            <Button variant="destructive" className="rounded-xl" onClick={handleDelete} disabled={deleting}>
+              {deleting ? "Bezig..." : "Verwijderen"}
             </Button>
           </DialogFooter>
         </DialogContent>
