@@ -38,9 +38,9 @@ const AuthPage = () => {
       <div className="w-full max-w-sm space-y-6">
         <div className="text-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground font-serif font-bold text-xl mx-auto">
-            B
+            ​€
           </div>
-          <h1 className="mt-4 text-2xl font-serif font-semibold">BudgetFlow</h1>
+          <h1 className="mt-4 text-2xl font-serif font-semibold">Personal finances </h1>
           <p className="text-muted-foreground mt-1">
             {isLogin ? "Log in op je account" : "Maak een account aan"}
           </p>
@@ -49,19 +49,19 @@ const AuthPage = () => {
         <Card className="border-0 shadow-sm rounded-2xl">
           <CardContent className="p-6">
             <form onSubmit={handleSubmit} className="space-y-4">
-              {!isLogin && (
-                <div className="space-y-2">
+              {!isLogin &&
+              <div className="space-y-2">
                   <Label htmlFor="name">Naam</Label>
                   <Input
-                    id="name"
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
-                    placeholder="Je naam"
-                    className="rounded-xl"
-                    required
-                  />
+                  id="name"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  placeholder="Je naam"
+                  className="rounded-xl"
+                  required />
+
                 </div>
-              )}
+              }
               <div className="space-y-2">
                 <Label htmlFor="email">E-mail</Label>
                 <Input
@@ -71,8 +71,8 @@ const AuthPage = () => {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="je@email.nl"
                   className="rounded-xl"
-                  required
-                />
+                  required />
+
               </div>
               <div className="space-y-2">
                 <Label htmlFor="password">Wachtwoord</Label>
@@ -84,8 +84,8 @@ const AuthPage = () => {
                   placeholder="••••••••"
                   className="rounded-xl"
                   required
-                  minLength={6}
-                />
+                  minLength={6} />
+
               </div>
               <Button type="submit" className="w-full rounded-xl" disabled={loading}>
                 {loading ? "Even geduld..." : isLogin ? "Inloggen" : "Registreren"}
@@ -98,14 +98,14 @@ const AuthPage = () => {
           {isLogin ? "Nog geen account?" : "Al een account?"}{" "}
           <button
             onClick={() => setIsLogin(!isLogin)}
-            className="text-primary hover:underline font-medium"
-          >
+            className="text-primary hover:underline font-medium">
+
             {isLogin ? "Registreer" : "Log in"}
           </button>
         </p>
       </div>
-    </div>
-  );
+    </div>);
+
 };
 
 export default AuthPage;
