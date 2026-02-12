@@ -12,17 +12,11 @@ type SpaceContextValue = {
   spaces: Space[];
   spacesLoading: boolean;
 
-  // "selectedSpaceId" = null betekent: Alles
-  selectedSpaceId: string | null;
+  selectedSpaceId: string | null; // null = Alles
   setSelectedSpaceId: (id: string | null) => void;
 
-  // defaultSpaceId komt uit je profiel (profiles.household_id)
   defaultSpaceId?: string;
-
-  // effectiveSpaceId = gekozen space of defaultSpaceId (handig voor inserts als "Alles" aanstaat)
   effectiveSpaceId?: string;
-
-  // displayName van geselecteerde space ("Alles" als null)
   selectedSpaceLabel: string;
 };
 
@@ -36,7 +30,7 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [selectedSpaceId, setSelectedSpaceIdState] = useState<string | null>(null);
 
-  // 1) defaultSpaceId uit profile
+  // ✅ SAFE: maybeSingle zodat missende profile row geen crash veroorzaakt
   const { data: profile, isLoading: profileLoading } = useQuery({
     queryKey: ["profile", user?.id],
     queryFn: async () => {
@@ -44,7 +38,8 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
         .from("profiles")
         .select("*")
         .eq("user_id", user!.id)
-        .single();
+        .maybeSingle();
+
       if (error) throw error;
       return data as { household_id: string | null } | null;
     },
@@ -53,7 +48,7 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
 
   const defaultSpaceId = profile?.household_id ?? undefined;
 
-  // 2) beschikbare spaces (DB heet deze tabel nog households)
+  // spaces = households (DB-naam)
   const { data: spaces = [], isLoading: spacesLoading } = useQuery({
     queryKey: ["spaces", user?.id],
     queryFn: async () => {
@@ -68,14 +63,14 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
     enabled: !!user && !profileLoading,
   });
 
-  // 3) laad saved selection uit localStorage
+  // load selection
   useEffect(() => {
     if (!user) return;
 
     const raw = localStorage.getItem(storageKey(user.id));
     if (!raw) {
-      // default: Als je 1 defaultSpaceId hebt, zetten we hem als "die space" (niet "Alles")
       if (defaultSpaceId) setSelectedSpaceIdState(defaultSpaceId);
+      else setSelectedSpaceIdState(null);
       return;
     }
 
@@ -83,7 +78,6 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
     else setSelectedSpaceIdState(raw);
   }, [user, defaultSpaceId]);
 
-  // 4) persist selection
   const setSelectedSpaceId = (id: string | null) => {
     if (!user) return;
     setSelectedSpaceIdState(id);
@@ -101,13 +95,10 @@ export function SpaceProvider({ children }: { children: React.ReactNode }) {
   const value: SpaceContextValue = {
     spaces,
     spacesLoading,
-
     selectedSpaceId,
     setSelectedSpaceId,
-
     defaultSpaceId,
     effectiveSpaceId,
-
     selectedSpaceLabel,
   };
 
