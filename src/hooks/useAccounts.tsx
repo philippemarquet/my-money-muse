@@ -4,7 +4,7 @@ import { useSpace } from "@/hooks/useSpace";
 
 export interface Account {
   id: string;
-  household_id: string; // space_id concept
+  household_id: string; // space concept
   naam: string;
   rekeningnummer: string;
   alias: string | null;
@@ -12,6 +12,14 @@ export interface Account {
   created_at: string;
   updated_at: string;
 }
+
+type CreateAccountInput = {
+  naam: string;
+  rekeningnummer: string;
+  alias?: string | null;
+  saldo?: number;
+  household_id?: string; // <-- NU KAN JE EXPLICIET SPACE MEEGEVEN
+};
 
 export function useAccounts() {
   const { selectedSpaceId, effectiveSpaceId } = useSpace();
@@ -28,47 +36,62 @@ export function useAccounts() {
 
       const { data, error } = await q;
       if (error) throw error;
-      return data as Account[];
+      return (data ?? []) as Account[];
     },
     enabled: selectedSpaceId === null || !!selectedSpaceId || !!effectiveSpaceId,
   });
 
   const create = useMutation({
-    mutationFn: async (acc: {
-      naam: string;
-      rekeningnummer: string;
-      alias?: string;
-      saldo?: number;
-    }) => {
-      const spaceId = effectiveSpaceId;
+    mutationFn: async (acc: CreateAccountInput) => {
+      const spaceId = acc.household_id ?? effectiveSpaceId;
       if (!spaceId) throw new Error("Geen space geselecteerd");
 
-      const { error } = await supabase.from("accounts").insert({
-        household_id: spaceId,
-        naam: acc.naam,
-        rekeningnummer: acc.rekeningnummer,
-        alias: acc.alias ?? null,
-        saldo: acc.saldo ?? 0,
-      });
+      const { data, error } = await supabase
+        .from("accounts")
+        .insert({
+          household_id: spaceId,
+          naam: acc.naam,
+          rekeningnummer: acc.rekeningnummer,
+          alias: acc.alias ?? null,
+          saldo: acc.saldo ?? 0,
+        })
+        .select("*")
+        .single();
+
       if (error) throw error;
+      return data as Account;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["accounts"] }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["accounts"] });
+    },
   });
 
   const update = useMutation({
     mutationFn: async ({ id, ...updates }: Partial<Account> & { id: string }) => {
-      const { error } = await supabase.from("accounts").update(updates).eq("id", id);
+      const { data, error } = await supabase
+        .from("accounts")
+        .update(updates)
+        .eq("id", id)
+        .select("*")
+        .single();
+
       if (error) throw error;
+      return data as Account;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["accounts"] }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["accounts"] });
+    },
   });
 
   const remove = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("accounts").delete().eq("id", id);
       if (error) throw error;
+      return true;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["accounts"] }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["accounts"] });
+    },
   });
 
   return { ...query, create, update, remove };
