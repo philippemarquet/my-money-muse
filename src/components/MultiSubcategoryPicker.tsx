@@ -44,8 +44,11 @@ export function MultiSubcategoryPicker({
   const [open, setOpen] = useState(false);
   const [activeCatId, setActiveCatId] = useState<string | null>(null);
 
-  const [qCat, setQCat] = useState("");
-  const [qSub, setQSub] = useState("");
+  // ✅ Eén zoekveld, globaal
+  const [q, setQ] = useState("");
+
+  const normalizedQuery = q.trim().toLowerCase();
+  const isSearching = normalizedQuery.length > 0;
 
   const selectedSubs = useMemo(
     () => value.map((id) => options.find((o) => o.sub_id === id)).filter(Boolean) as SubPick[],
@@ -62,6 +65,7 @@ export function MultiSubcategoryPicker({
         cat_color: string;
         cat_icon?: string;
         count: number;
+        matchCount: number;
       }
     >();
 
@@ -74,34 +78,54 @@ export function MultiSubcategoryPicker({
           cat_color: o.cat_color,
           cat_icon: o.cat_icon,
           count: 0,
+          matchCount: 0,
         });
       }
-      map.get(o.cat_id)!.count += 1;
+      const entry = map.get(o.cat_id)!;
+      entry.count += 1;
+
+      if (isSearching) {
+        const catHit = o.cat_name.toLowerCase().includes(normalizedQuery);
+        const subHit = o.sub_name.toLowerCase().includes(normalizedQuery);
+        if (catHit || subHit) entry.matchCount += 1;
+      }
     }
 
-    const list = Array.from(map.values()).sort((a, b) => a.cat_name.localeCompare(b.cat_name));
-    const q = qCat.trim().toLowerCase();
-    if (!q) return list;
-
-    return list.filter((c) => c.cat_name.toLowerCase().includes(q));
-  }, [options, qCat]);
+    let list = Array.from(map.values()).sort((a, b) => a.cat_name.localeCompare(b.cat_name));
+    if (isSearching) {
+      list = list
+        .filter((c) => c.matchCount > 0)
+        .sort((a, b) => b.matchCount - a.matchCount || a.cat_name.localeCompare(b.cat_name));
+    }
+    return list;
+  }, [options, isSearching, normalizedQuery]);
 
   const activeCat = useMemo(() => {
     if (activeCatId) return cats.find((c) => c.cat_id === activeCatId) ?? null;
     return cats[0] ?? null;
   }, [activeCatId, cats]);
 
-  const subsForActive = useMemo(() => {
-    if (!activeCat) return [];
-    const list = options
-      .filter((o) => o.cat_id === activeCat.cat_id)
-      .sort((a, b) => a.sub_name.localeCompare(b.sub_name));
+  // ✅ Rechts: als er een zoekterm is -> toon subcategorie matches over ALLE cats
+  const subs = useMemo(() => {
+    if (!isSearching) {
+      if (!activeCat) return [];
+      return options
+        .filter((o) => o.cat_id === activeCat.cat_id)
+        .sort((a, b) => a.sub_name.localeCompare(b.sub_name));
+    }
 
-    const q = qSub.trim().toLowerCase();
-    if (!q) return list;
-
-    return list.filter((s) => s.sub_name.toLowerCase().includes(q));
-  }, [options, activeCat, qSub]);
+    return options
+      .filter((o) => {
+        const catHit = o.cat_name.toLowerCase().includes(normalizedQuery);
+        const subHit = o.sub_name.toLowerCase().includes(normalizedQuery);
+        return catHit || subHit;
+      })
+      .sort(
+        (a, b) =>
+          a.cat_name.localeCompare(b.cat_name) ||
+          a.sub_name.localeCompare(b.sub_name)
+      );
+  }, [options, activeCat, isSearching, normalizedQuery]);
 
   const toggle = (subId: string) => {
     const next = value.includes(subId) ? value.filter((x) => x !== subId) : [...value, subId];
@@ -114,8 +138,7 @@ export function MultiSubcategoryPicker({
     setOpen(v);
     if (v) {
       if (!activeCatId && cats[0]) setActiveCatId(cats[0].cat_id);
-      setQCat("");
-      setQSub("");
+      setQ("");
     }
   };
 
@@ -126,7 +149,6 @@ export function MultiSubcategoryPicker({
       ? formatLabel(selectedSubs[0])
       : `${selectedSubs.length} subcategorieën geselecteerd`;
 
-  // Trigger icon/color: use first selected if exists else neutral
   const triggerColor = selectedSubs[0]?.cat_color ?? "hsl(30, 10%, 50%)";
   const TriggerIcon = selectedSubs[0] ? getLucideIconByName(selectedSubs[0].cat_icon) : (LucideIcons as any).Tag;
 
@@ -169,27 +191,71 @@ export function MultiSubcategoryPicker({
         </Button>
       </PopoverTrigger>
 
-      <PopoverContent align="start" className="w-[680px] p-0 rounded-2xl border-0 shadow-xl">
-        <div className="flex">
-          {/* Left: categories */}
-          <div className="w-[280px] border-r border-border">
-            <div className="px-3 pt-3 pb-2">
-              <div className="text-xs text-muted-foreground mb-2">Categorie</div>
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  value={qCat}
-                  onChange={(e) => setQCat(e.target.value)}
-                  placeholder="Zoek categorie…"
-                  className="pl-9 rounded-xl"
-                />
+      {/* ✅ Zelfde “netheid” als single: breedte + hoogte + placement */}
+      <PopoverContent
+        side="bottom"
+        align="start"
+        sideOffset={8}
+        collisionPadding={12}
+        className={cn(
+          "p-0 rounded-2xl border-0 shadow-xl overflow-hidden",
+          "w-[560px] max-w-[calc(100vw-1.5rem)]"
+        )}
+      >
+        {/* ✅ Global search bar (bovenaan, over alles) */}
+        <div className="px-3 pt-3 pb-2 border-b border-border bg-background">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-xs text-muted-foreground mb-2">
+                Zoek in categorieën en subcategorieën
               </div>
             </div>
+            <div className="text-xs text-muted-foreground shrink-0">
+              {value.length} geselecteerd
+            </div>
+          </div>
 
-            <ScrollArea className="h-[420px]">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Typ om te zoeken…"
+              className="pl-9 rounded-xl"
+            />
+          </div>
+
+          {/* Selected chips (compact) */}
+          {value.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {selectedSubs.slice(0, 6).map((s) => (
+                <Badge key={s.sub_id} variant="secondary" className="rounded-lg text-xs font-normal gap-1">
+                  {formatLabel(s)}
+                  <button type="button" onClick={() => toggle(s.sub_id)} title="Verwijderen">
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
+              {selectedSubs.length > 6 && (
+                <Badge variant="secondary" className="rounded-lg text-xs font-normal">
+                  +{selectedSubs.length - 6} meer
+                </Badge>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="flex">
+          {/* Left: categories */}
+          <div className="w-[240px] border-r border-border">
+            <div className="px-3 py-2 text-xs text-muted-foreground">
+              Categorie{isSearching ? " (matches)" : ""}
+            </div>
+
+            <ScrollArea className="h-[320px]">
               <div className="p-2 space-y-1">
                 {cats.length === 0 && (
-                  <div className="p-3 text-sm text-muted-foreground">Geen categorieën gevonden.</div>
+                  <div className="p-3 text-sm text-muted-foreground">Geen resultaten.</div>
                 )}
 
                 {cats.map((c) => {
@@ -214,7 +280,9 @@ export function MultiSubcategoryPicker({
                       </span>
                       <span className="flex-1 min-w-0">
                         <span className="block truncate text-sm font-medium">{c.cat_name}</span>
-                        <span className="block text-xs text-muted-foreground">{c.count} sub</span>
+                        <span className="block text-xs text-muted-foreground">
+                          {isSearching ? `${c.matchCount} match` : `${c.count} sub`}
+                        </span>
                       </span>
                       <ChevronRight className="h-4 w-4 opacity-50" />
                     </button>
@@ -226,56 +294,21 @@ export function MultiSubcategoryPicker({
 
           {/* Right: subcategories */}
           <div className="flex-1">
-            <div className="px-3 pt-3 pb-2 border-b border-border">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="text-xs text-muted-foreground mb-2">
-                    Subcategorie{activeCat ? ` — ${activeCat.cat_name}` : ""}
-                  </div>
-                </div>
-
-                <div className="text-xs text-muted-foreground shrink-0">
-                  {value.length} geselecteerd
-                </div>
-              </div>
-
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  value={qSub}
-                  onChange={(e) => setQSub(e.target.value)}
-                  placeholder="Zoek subcategorie…"
-                  className="pl-9 rounded-xl"
-                />
-              </div>
-
-              {value.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {selectedSubs.slice(0, 8).map((s) => (
-                    <Badge key={s.sub_id} variant="secondary" className="rounded-lg text-xs font-normal gap-1">
-                      {formatLabel(s)}
-                      <button type="button" onClick={() => toggle(s.sub_id)} title="Verwijderen">
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                  {selectedSubs.length > 8 && (
-                    <Badge variant="secondary" className="rounded-lg text-xs font-normal">
-                      +{selectedSubs.length - 8} meer
-                    </Badge>
-                  )}
-                </div>
-              )}
+            <div className="px-3 py-2 text-xs text-muted-foreground border-b border-border">
+              {isSearching
+                ? "Subcategorie resultaten (alle categorieën)"
+                : `Subcategorie — ${activeCat?.cat_name ?? ""}`}
             </div>
 
-            <ScrollArea className="h-[420px]">
+            <ScrollArea className="h-[320px]">
               <div className="p-2 space-y-1">
-                {subsForActive.length === 0 && (
+                {subs.length === 0 && (
                   <div className="p-3 text-sm text-muted-foreground">Geen subcategorieën gevonden.</div>
                 )}
 
-                {subsForActive.map((s) => {
+                {subs.map((s) => {
                   const checked = value.includes(s.sub_id);
+
                   return (
                     <button
                       key={s.sub_id}
@@ -286,9 +319,16 @@ export function MultiSubcategoryPicker({
                         checked ? "bg-primary/10" : "hover:bg-secondary/70"
                       )}
                     >
-                      <span className="flex items-center gap-2">
+                      <span className="flex items-start gap-2 min-w-0">
                         <Checkbox checked={checked} onCheckedChange={() => toggle(s.sub_id)} />
-                        <span className="text-sm">{s.sub_name}</span>
+                        <span className="min-w-0">
+                          <span className="block text-sm truncate">{s.sub_name}</span>
+                          {isSearching && (
+                            <span className="block text-xs text-muted-foreground truncate">
+                              {s.cat_name}
+                            </span>
+                          )}
+                        </span>
                       </span>
 
                       {checked && (
