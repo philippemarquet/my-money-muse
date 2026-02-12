@@ -7,12 +7,20 @@ export interface Budget {
   household_id: string;
   naam: string;
   bedrag: number;
-  type: string;
-  richting: string;
+  type: "maandelijks" | "jaarlijks";
+  richting: "inkomsten" | "uitgaven";
   rollover: boolean;
   created_at: string;
   updated_at: string;
-  budget_categories?: { category_id: string; categories: { naam: string } }[];
+
+  budget_categories?: {
+    subcategory_id: string | null;
+    allocated_amount: number;
+    subcategories?: {
+      naam: string;
+      categories?: { naam: string; type: string } | null;
+    } | null;
+  }[];
 }
 
 export function useBudgets() {
@@ -24,8 +32,11 @@ export function useBudgets() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("budgets")
-        .select("*, budget_categories(category_id, categories(naam))")
+        .select(
+          "*, budget_categories(subcategory_id, allocated_amount, subcategories(naam, categories(naam, type)))"
+        )
         .order("naam");
+
       if (error) throw error;
       return data as Budget[];
     },
@@ -36,47 +47,60 @@ export function useBudgets() {
     mutationFn: async (b: {
       naam: string;
       bedrag: number;
-      type: string;
-      richting: string;
+      type: "maandelijks" | "jaarlijks";
+      richting: "inkomsten" | "uitgaven";
       rollover: boolean;
-      category_ids: string[];
+      subcategory_ids: string[];
     }) => {
-      const { category_ids, ...budgetData } = b;
+      const { subcategory_ids, ...budgetData } = b;
+
       const { data, error } = await supabase
         .from("budgets")
         .insert({ household_id: householdId!, ...budgetData })
         .select()
         .single();
+
       if (error) throw error;
-      if (category_ids.length > 0) {
-        const { error: linkError } = await supabase
-          .from("budget_categories")
-          .insert(category_ids.map((cid) => ({ budget_id: data.id, category_id: cid })));
+
+      if (subcategory_ids.length > 0) {
+        const { error: linkError } = await supabase.from("budget_categories").insert(
+          subcategory_ids.map((sid) => ({
+            budget_id: data.id,
+            subcategory_id: sid,
+            allocated_amount: 0,
+          }))
+        );
         if (linkError) throw linkError;
       }
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["budgets"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["budgets", householdId] }),
   });
 
   const update = useMutation({
     mutationFn: async ({
       id,
-      category_ids,
+      subcategory_ids,
       ...updates
-    }: Partial<Budget> & { id: string; category_ids?: string[] }) => {
+    }: Partial<Budget> & { id: string; subcategory_ids?: string[] }) => {
       const { error } = await supabase.from("budgets").update(updates).eq("id", id);
       if (error) throw error;
-      if (category_ids !== undefined) {
+
+      if (subcategory_ids !== undefined) {
         await supabase.from("budget_categories").delete().eq("budget_id", id);
-        if (category_ids.length > 0) {
-          const { error: linkError } = await supabase
-            .from("budget_categories")
-            .insert(category_ids.map((cid) => ({ budget_id: id, category_id: cid })));
+
+        if (subcategory_ids.length > 0) {
+          const { error: linkError } = await supabase.from("budget_categories").insert(
+            subcategory_ids.map((sid) => ({
+              budget_id: id,
+              subcategory_id: sid,
+              allocated_amount: 0,
+            }))
+          );
           if (linkError) throw linkError;
         }
       }
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["budgets"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["budgets", householdId] }),
   });
 
   const remove = useMutation({
@@ -84,7 +108,7 @@ export function useBudgets() {
       const { error } = await supabase.from("budgets").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["budgets"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["budgets", householdId] }),
   });
 
   return { ...query, create, update, remove };
