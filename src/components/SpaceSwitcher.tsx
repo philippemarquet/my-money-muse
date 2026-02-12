@@ -27,10 +27,7 @@ export function SpaceSwitcher({ className }: { className?: string }) {
       disabled={spacesLoading}
     >
       <SelectTrigger
-        className={cn(
-          "w-[240px] rounded-xl border-0 bg-card shadow-sm justify-between",
-          className
-        )}
+        className={cn("w-[240px] rounded-xl border-0 bg-card shadow-sm justify-between", className)}
       >
         <div className="flex items-center gap-2 min-w-0">
           <Landmark className="h-4 w-4 text-muted-foreground" />
