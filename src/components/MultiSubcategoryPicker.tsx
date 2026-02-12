@@ -44,7 +44,7 @@ export function MultiSubcategoryPicker({
   const [open, setOpen] = useState(false);
   const [activeCatId, setActiveCatId] = useState<string | null>(null);
 
-  // ✅ Eén zoekveld, globaal
+  // Eén globaal zoekveld
   const [q, setQ] = useState("");
 
   const normalizedQuery = q.trim().toLowerCase();
@@ -105,7 +105,6 @@ export function MultiSubcategoryPicker({
     return cats[0] ?? null;
   }, [activeCatId, cats]);
 
-  // ✅ Rechts: als er een zoekterm is -> toon subcategorie matches over ALLE cats
   const subs = useMemo(() => {
     if (!isSearching) {
       if (!activeCat) return [];
@@ -120,11 +119,7 @@ export function MultiSubcategoryPicker({
         const subHit = o.sub_name.toLowerCase().includes(normalizedQuery);
         return catHit || subHit;
       })
-      .sort(
-        (a, b) =>
-          a.cat_name.localeCompare(b.cat_name) ||
-          a.sub_name.localeCompare(b.sub_name)
-      );
+      .sort((a, b) => a.cat_name.localeCompare(b.cat_name) || a.sub_name.localeCompare(b.sub_name));
   }, [options, activeCat, isSearching, normalizedQuery]);
 
   const toggle = (subId: string) => {
@@ -191,7 +186,6 @@ export function MultiSubcategoryPicker({
         </Button>
       </PopoverTrigger>
 
-      {/* ✅ Zelfde “netheid” als single: breedte + hoogte + placement */}
       <PopoverContent
         side="bottom"
         align="start"
@@ -199,10 +193,11 @@ export function MultiSubcategoryPicker({
         collisionPadding={12}
         className={cn(
           "p-0 rounded-2xl border-0 shadow-xl overflow-hidden",
-          "w-[560px] max-w-[calc(100vw-1.5rem)]"
+          // ✅ kleiner dan single
+          "w-[520px] max-w-[calc(100vw-1.5rem)]"
         )}
       >
-        {/* ✅ Global search bar (bovenaan, over alles) */}
+        {/* Header (compacter) */}
         <div className="px-3 pt-3 pb-2 border-b border-border bg-background">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
@@ -211,7 +206,7 @@ export function MultiSubcategoryPicker({
               </div>
             </div>
             <div className="text-xs text-muted-foreground shrink-0">
-              {value.length} geselecteerd
+              {value.length}
             </div>
           </div>
 
@@ -225,10 +220,10 @@ export function MultiSubcategoryPicker({
             />
           </div>
 
-          {/* Selected chips (compact) */}
+          {/* Chips: max 3 (compacter) */}
           {value.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mt-2">
-              {selectedSubs.slice(0, 6).map((s) => (
+              {selectedSubs.slice(0, 3).map((s) => (
                 <Badge key={s.sub_id} variant="secondary" className="rounded-lg text-xs font-normal gap-1">
                   {formatLabel(s)}
                   <button type="button" onClick={() => toggle(s.sub_id)} title="Verwijderen">
@@ -236,9 +231,9 @@ export function MultiSubcategoryPicker({
                   </button>
                 </Badge>
               ))}
-              {selectedSubs.length > 6 && (
+              {selectedSubs.length > 3 && (
                 <Badge variant="secondary" className="rounded-lg text-xs font-normal">
-                  +{selectedSubs.length - 6} meer
+                  +{selectedSubs.length - 3}
                 </Badge>
               )}
             </div>
@@ -246,17 +241,16 @@ export function MultiSubcategoryPicker({
         </div>
 
         <div className="flex">
-          {/* Left: categories */}
-          <div className="w-[240px] border-r border-border">
+          {/* Left */}
+          <div className="w-[220px] border-r border-border">
             <div className="px-3 py-2 text-xs text-muted-foreground">
               Categorie{isSearching ? " (matches)" : ""}
             </div>
 
-            <ScrollArea className="h-[320px]">
+            {/* ✅ lager dan single: 280px */}
+            <ScrollArea className="h-[280px]">
               <div className="p-2 space-y-1">
-                {cats.length === 0 && (
-                  <div className="p-3 text-sm text-muted-foreground">Geen resultaten.</div>
-                )}
+                {cats.length === 0 && <div className="p-3 text-sm text-muted-foreground">Geen resultaten.</div>}
 
                 {cats.map((c) => {
                   const Icon = getLucideIconByName(c.cat_icon);
@@ -292,7 +286,7 @@ export function MultiSubcategoryPicker({
             </ScrollArea>
           </div>
 
-          {/* Right: subcategories */}
+          {/* Right */}
           <div className="flex-1">
             <div className="px-3 py-2 text-xs text-muted-foreground border-b border-border">
               {isSearching
@@ -300,11 +294,10 @@ export function MultiSubcategoryPicker({
                 : `Subcategorie — ${activeCat?.cat_name ?? ""}`}
             </div>
 
-            <ScrollArea className="h-[320px]">
+            {/* ✅ lager dan single: 280px */}
+            <ScrollArea className="h-[280px]">
               <div className="p-2 space-y-1">
-                {subs.length === 0 && (
-                  <div className="p-3 text-sm text-muted-foreground">Geen subcategorieën gevonden.</div>
-                )}
+                {subs.length === 0 && <div className="p-3 text-sm text-muted-foreground">Geen subcategorieën gevonden.</div>}
 
                 {subs.map((s) => {
                   const checked = value.includes(s.sub_id);
@@ -333,7 +326,7 @@ export function MultiSubcategoryPicker({
 
                       {checked && (
                         <Badge variant="secondary" className="rounded-lg text-xs font-normal">
-                          geselecteerd
+                          ✓
                         </Badge>
                       )}
                     </button>
@@ -341,17 +334,10 @@ export function MultiSubcategoryPicker({
                 })}
               </div>
             </ScrollArea>
-
-            <div className="p-3 border-t border-border flex justify-end gap-2">
-              <Button type="button" variant="outline" className="rounded-xl" onClick={clear}>
-                Wissen
-              </Button>
-              <Button type="button" className="rounded-xl" onClick={() => setOpen(false)}>
-                Klaar
-              </Button>
-            </div>
           </div>
         </div>
+
+        {/* ✅ Geen footer meer (scheelt hoogte). Sluiten = click outside */}
       </PopoverContent>
     </Popover>
   );
