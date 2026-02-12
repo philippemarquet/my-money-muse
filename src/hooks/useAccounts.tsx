@@ -4,7 +4,7 @@ import { useSpace } from "@/hooks/useSpace";
 
 export interface Account {
   id: string;
-  household_id: string; // space concept
+  household_id: string;
   naam: string;
   rekeningnummer: string;
   alias: string | null;
@@ -18,7 +18,7 @@ type CreateAccountInput = {
   rekeningnummer: string;
   alias?: string | null;
   saldo?: number;
-  household_id?: string; // <-- NU KAN JE EXPLICIET SPACE MEEGEVEN
+  household_id?: string;
 };
 
 export function useAccounts() {
@@ -29,10 +29,7 @@ export function useAccounts() {
     queryKey: ["accounts", selectedSpaceId],
     queryFn: async () => {
       let q = supabase.from("accounts").select("*").order("naam", { ascending: true });
-
-      if (selectedSpaceId !== null) {
-        q = q.eq("household_id", selectedSpaceId);
-      }
+      if (selectedSpaceId !== null) q = q.eq("household_id", selectedSpaceId);
 
       const { data, error } = await q;
       if (error) throw error;
@@ -80,6 +77,7 @@ export function useAccounts() {
     },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["accounts"] });
+      await qc.invalidateQueries({ queryKey: ["transactions"] });
     },
   });
 
@@ -91,6 +89,7 @@ export function useAccounts() {
     },
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: ["accounts"] });
+      await qc.invalidateQueries({ queryKey: ["transactions"] });
     },
   });
 
