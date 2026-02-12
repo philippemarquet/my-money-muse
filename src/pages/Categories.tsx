@@ -20,9 +20,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import { useCategories, Category, Subcategory } from "@/hooks/useCategories";
 import { toast } from "sonner";
-import { Separator } from "@/components/ui/separator";
+
+type CategoryWithSubs = Category & { subcategories: Subcategory[] };
 
 const curatedIconOptions = [
   "ShoppingCart",
@@ -46,13 +48,20 @@ const colorOptions = [
   "hsl(340, 50%, 50%)",
 ];
 
-type CategoryWithSubs = Category & { subcategories: Subcategory[] };
-
 function getLucideIconByName(name: string | null | undefined) {
   const key = (name ?? "").trim();
   const fallback = (LucideIcons as any).ShoppingCart as any;
   const Icon = (LucideIcons as any)[key] as any;
   return Icon ?? fallback;
+}
+
+function alphaBackground(color: string, alpha = 0.14) {
+  const c = (color ?? "").trim();
+  const hslMatch = c.match(/^hsl\((.+)\)$/i);
+  if (hslMatch) return `hsla(${hslMatch[1]}, ${alpha})`;
+  const hexMatch = c.match(/^#([0-9a-f]{6})$/i);
+  if (hexMatch) return `${c}${Math.round(alpha * 255).toString(16).padStart(2, "0")}`;
+  return `color-mix(in srgb, ${c} ${Math.round(alpha * 100)}%, transparent)`;
 }
 
 const Categories = () => {
@@ -73,72 +82,76 @@ const Categories = () => {
   const resetForm = () =>
     setForm({ naam: "", kleur: colorOptions[0], icoon: "ShoppingCart", type: "uitgaven" });
 
-  // ✅ Fix: zodra categories refetcht na add/remove subcategory, update de editing reference
   useEffect(() => {
     if (!editing) return;
-    const fresh = categories.find((c) => c.id === editing.id);
+    const fresh = (categories as CategoryWithSubs[]).find((c) => c.id === editing.id);
     if (!fresh) return;
 
-    // Alleen updaten als subcategories/fields zijn veranderd
     const freshStr = JSON.stringify(fresh);
     const editStr = JSON.stringify(editing);
-    if (freshStr !== editStr) {
-      setEditing(fresh as CategoryWithSubs);
-    }
+    if (freshStr !== editStr) setEditing(fresh);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [categories, editing?.id]);
 
   const expenses = useMemo(
-    () => categories.filter((c) => c.type === "uitgaven"),
-    [categories]
+    () => (categories as CategoryWithSubs[]).filter((c) => c.type === "uitgaven"),
+    [categories],
   );
   const incomes = useMemo(
-    () => categories.filter((c) => c.type === "inkomsten"),
-    [categories]
+    () => (categories as CategoryWithSubs[]).filter((c) => c.type === "inkomsten"),
+    [categories],
   );
 
   const openEdit = (c: CategoryWithSubs) => {
-    setForm({ naam: c.naam, kleur: c.kleur, icoon: c.icoon, type: c.type });
+    setForm({ naam: c.naam, kleur: c.kleur, icoon: c.icoon, type: c.type as any });
     setEditing(c);
   };
 
   const handleSave = async () => {
     try {
+      if (!form.naam.trim()) {
+        toast.error("Geef de categorie een naam.");
+        return;
+      }
+
       if (editing) {
         await update.mutateAsync({
           id: editing.id,
-          naam: form.naam,
+          naam: form.naam.trim(),
           kleur: form.kleur,
           icoon: form.icoon,
           type: form.type,
-        });
+        } as any);
         toast.success("Categorie bijgewerkt");
       } else {
         await create.mutateAsync({
-          naam: form.naam,
+          naam: form.naam.trim(),
           kleur: form.kleur,
           icoon: form.icoon,
           type: form.type,
-        });
+        } as any);
         toast.success("Categorie toegevoegd");
       }
+
       setEditing(null);
       setShowAdd(false);
+      setNewSub("");
       resetForm();
     } catch (err: any) {
-      toast.error(err.message ?? "Opslaan mislukt");
+      toast.error(err?.message ?? "Opslaan mislukt");
     }
   };
 
   const handleAddSub = async () => {
-    if (!editing || !newSub.trim()) return;
+    if (!editing) return;
+    if (!newSub.trim()) return;
+
     try {
       await addSub.mutateAsync({ category_id: editing.id, naam: newSub.trim() });
       setNewSub("");
       toast.success("Subcategorie toegevoegd");
-      // categories refetch gebeurt via invalidate; useEffect sync’t editing -> popup toont direct
     } catch (err: any) {
-      toast.error(err.message ?? "Toevoegen mislukt");
+      toast.error(err?.message ?? "Toevoegen mislukt");
     }
   };
 
@@ -173,10 +186,14 @@ const Categories = () => {
                     <div className="flex items-center gap-3">
                       <div
                         className="flex h-10 w-10 items-center justify-center rounded-xl"
-                        style={{ backgroundColor: cat.kleur + "22", color: cat.kleur }}
+                        style={{
+                          backgroundColor: alphaBackground(cat.kleur),
+                          color: cat.kleur,
+                        }}
                       >
                         <Icon className="h-5 w-5" />
                       </div>
+
                       <div>
                         <h3 className="font-medium">{cat.naam}</h3>
                         <Badge variant="outline" className="text-xs rounded-lg mt-0.5">
@@ -240,11 +257,11 @@ const Categories = () => {
         </Button>
       </div>
 
-      <Section title="Uitgaven" items={expenses as CategoryWithSubs[]} />
+      <Section title="Uitgaven" items={expenses} />
 
       <Separator className="my-2" />
 
-      <Section title="Inkomsten" items={incomes as CategoryWithSubs[]} />
+      <Section title="Inkomsten" items={incomes} />
 
       <Dialog
         open={dialogOpen}
