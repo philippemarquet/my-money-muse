@@ -1,10 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useHousehold } from "./useHousehold";
+import { useSpace } from "@/hooks/useSpace";
 
 export interface Budget {
   id: string;
-  household_id: string;
+  household_id: string; // space concept
   naam: string;
   bedrag: number;
   type: "maandelijks" | "jaarlijks";
@@ -24,23 +24,28 @@ export interface Budget {
 }
 
 export function useBudgets() {
-  const { householdId } = useHousehold();
+  const { selectedSpaceId, effectiveSpaceId } = useSpace();
   const qc = useQueryClient();
 
   const query = useQuery({
-    queryKey: ["budgets", householdId],
+    queryKey: ["budgets", selectedSpaceId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let q = supabase
         .from("budgets")
         .select(
           "*, budget_categories(subcategory_id, allocated_amount, subcategories(naam, categories(naam, type)))"
         )
-        .order("naam");
+        .order("naam", { ascending: true });
 
+      if (selectedSpaceId !== null) {
+        q = q.eq("household_id", selectedSpaceId);
+      }
+
+      const { data, error } = await q;
       if (error) throw error;
       return data as Budget[];
     },
-    enabled: !!householdId,
+    enabled: selectedSpaceId === null || !!selectedSpaceId || !!effectiveSpaceId,
   });
 
   const create = useMutation({
@@ -52,11 +57,14 @@ export function useBudgets() {
       rollover: boolean;
       subcategory_ids: string[];
     }) => {
+      const spaceId = effectiveSpaceId;
+      if (!spaceId) throw new Error("Geen space geselecteerd");
+
       const { subcategory_ids, ...budgetData } = b;
 
       const { data, error } = await supabase
         .from("budgets")
-        .insert({ household_id: householdId!, ...budgetData })
+        .insert({ household_id: spaceId, ...budgetData })
         .select()
         .single();
 
@@ -73,7 +81,7 @@ export function useBudgets() {
         if (linkError) throw linkError;
       }
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["budgets", householdId] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["budgets"] }),
   });
 
   const update = useMutation({
@@ -100,7 +108,7 @@ export function useBudgets() {
         }
       }
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["budgets", householdId] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["budgets"] }),
   });
 
   const remove = useMutation({
@@ -108,7 +116,7 @@ export function useBudgets() {
       const { error } = await supabase.from("budgets").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["budgets", householdId] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["budgets"] }),
   });
 
   return { ...query, create, update, remove };
