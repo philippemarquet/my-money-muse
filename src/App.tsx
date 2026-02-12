@@ -5,6 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
+import { SpaceProvider } from "@/hooks/useSpace";
+
 import Dashboard from "./pages/Dashboard";
 import Transactions from "./pages/Transactions";
 import Budgets from "./pages/Budgets";
@@ -30,17 +32,19 @@ function ProtectedRoutes() {
   if (!user) return <Navigate to="/auth" replace />;
 
   return (
-    <AppLayout>
-      <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/transacties" element={<Transactions />} />
-        <Route path="/budgetten" element={<Budgets />} />
-        <Route path="/categorieen" element={<Categories />} />
-        <Route path="/rekeningen" element={<Accounts />} />
-        <Route path="/instellingen" element={<SettingsPage />} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-    </AppLayout>
+    <SpaceProvider>
+      <AppLayout>
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/transacties" element={<Transactions />} />
+          <Route path="/budgetten" element={<Budgets />} />
+          <Route path="/categorieen" element={<Categories />} />
+          <Route path="/rekeningen" element={<Accounts />} />
+          <Route path="/instellingen" element={<SettingsPage />} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </AppLayout>
+    </SpaceProvider>
   );
 }
 
