@@ -4,7 +4,7 @@ import { useSpace } from "@/hooks/useSpace";
 
 export interface Budget {
   id: string;
-  household_id: string; // space concept
+  household_id: string;
   naam: string;
   bedrag: number;
   type: "maandelijks" | "jaarlijks";
@@ -23,6 +23,17 @@ export interface Budget {
   }[];
 }
 
+type UpsertBudgetInput = {
+  id?: string;
+  household_id?: string;
+  naam: string;
+  bedrag: number;
+  type: "maandelijks" | "jaarlijks";
+  richting: "inkomsten" | "uitgaven";
+  rollover: boolean;
+  subcategory_ids: string[];
+};
+
 export function useBudgets() {
   const { selectedSpaceId, effectiveSpaceId } = useSpace();
   const qc = useQueryClient();
@@ -32,35 +43,24 @@ export function useBudgets() {
     queryFn: async () => {
       let q = supabase
         .from("budgets")
-        .select(
-          "*, budget_categories(subcategory_id, allocated_amount, subcategories(naam, categories(naam, type)))"
-        )
+        .select("*, budget_categories(subcategory_id, allocated_amount, subcategories(naam, categories(naam, type)))")
         .order("naam", { ascending: true });
 
-      if (selectedSpaceId !== null) {
-        q = q.eq("household_id", selectedSpaceId);
-      }
+      if (selectedSpaceId !== null) q = q.eq("household_id", selectedSpaceId);
 
       const { data, error } = await q;
       if (error) throw error;
-      return data as Budget[];
+      return (data ?? []) as Budget[];
     },
     enabled: selectedSpaceId === null || !!selectedSpaceId || !!effectiveSpaceId,
   });
 
   const create = useMutation({
-    mutationFn: async (b: {
-      naam: string;
-      bedrag: number;
-      type: "maandelijks" | "jaarlijks";
-      richting: "inkomsten" | "uitgaven";
-      rollover: boolean;
-      subcategory_ids: string[];
-    }) => {
-      const spaceId = effectiveSpaceId;
+    mutationFn: async (b: UpsertBudgetInput) => {
+      const spaceId = b.household_id ?? effectiveSpaceId;
       if (!spaceId) throw new Error("Geen space geselecteerd");
 
-      const { subcategory_ids, ...budgetData } = b;
+      const { subcategory_ids, household_id, ...budgetData } = b;
 
       const { data, error } = await supabase
         .from("budgets")
@@ -81,34 +81,35 @@ export function useBudgets() {
         if (linkError) throw linkError;
       }
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["budgets"] }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["budgets"] });
+    },
   });
 
   const update = useMutation({
-    mutationFn: async ({
-      id,
-      subcategory_ids,
-      ...updates
-    }: Partial<Budget> & { id: string; subcategory_ids?: string[] }) => {
+    mutationFn: async (b: UpsertBudgetInput & { id: string }) => {
+      const { id, subcategory_ids, ...updates } = b;
+
       const { error } = await supabase.from("budgets").update(updates).eq("id", id);
       if (error) throw error;
 
-      if (subcategory_ids !== undefined) {
-        await supabase.from("budget_categories").delete().eq("budget_id", id);
+      // replace links
+      await supabase.from("budget_categories").delete().eq("budget_id", id);
 
-        if (subcategory_ids.length > 0) {
-          const { error: linkError } = await supabase.from("budget_categories").insert(
-            subcategory_ids.map((sid) => ({
-              budget_id: id,
-              subcategory_id: sid,
-              allocated_amount: 0,
-            }))
-          );
-          if (linkError) throw linkError;
-        }
+      if (subcategory_ids.length > 0) {
+        const { error: linkError } = await supabase.from("budget_categories").insert(
+          subcategory_ids.map((sid) => ({
+            budget_id: id,
+            subcategory_id: sid,
+            allocated_amount: 0,
+          }))
+        );
+        if (linkError) throw linkError;
       }
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["budgets"] }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["budgets"] });
+    },
   });
 
   const remove = useMutation({
@@ -116,7 +117,9 @@ export function useBudgets() {
       const { error } = await supabase.from("budgets").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["budgets"] }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["budgets"] });
+    },
   });
 
   return { ...query, create, update, remove };
