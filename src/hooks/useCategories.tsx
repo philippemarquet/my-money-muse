@@ -4,7 +4,7 @@ import { useSpace } from "@/hooks/useSpace";
 
 export interface Category {
   id: string;
-  household_id: string; // space_id in concept
+  household_id: string;
   naam: string;
   kleur: string;
   icoon: string;
@@ -32,35 +32,44 @@ export function useCategories() {
         .order("type", { ascending: true })
         .order("naam", { ascending: true });
 
-      // null = Alles => geen filter
-      if (selectedSpaceId !== null) {
-        q = q.eq("household_id", selectedSpaceId);
-      }
+      if (selectedSpaceId !== null) q = q.eq("household_id", selectedSpaceId);
 
       const { data, error } = await q;
       if (error) throw error;
-      return data as (Category & { subcategories: Subcategory[] })[];
+
+      return (data ?? []) as (Category & { subcategories: Subcategory[] })[];
     },
     enabled: selectedSpaceId === null || !!selectedSpaceId || !!effectiveSpaceId,
   });
 
   const create = useMutation({
     mutationFn: async (cat: {
+      household_id?: string;
       naam: string;
       kleur: string;
       icoon: string;
       type: "inkomsten" | "uitgaven";
     }) => {
-      const spaceId = effectiveSpaceId;
+      const spaceId = cat.household_id ?? effectiveSpaceId;
       if (!spaceId) throw new Error("Geen space geselecteerd");
 
-      const { error } = await supabase.from("categories").insert({
-        household_id: spaceId,
-        ...cat,
-      });
+      const { household_id, ...payload } = cat;
+
+      const { data, error } = await supabase
+        .from("categories")
+        .insert({
+          household_id: spaceId,
+          ...payload,
+        })
+        .select("*")
+        .single();
+
       if (error) throw error;
+      return data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["categories"] }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["categories"] });
+    },
   });
 
   const update = useMutation({
@@ -68,7 +77,9 @@ export function useCategories() {
       const { error } = await supabase.from("categories").update(updates).eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["categories"] }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["categories"] });
+    },
   });
 
   const remove = useMutation({
@@ -76,15 +87,25 @@ export function useCategories() {
       const { error } = await supabase.from("categories").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["categories"] }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["categories"] });
+    },
   });
 
   const addSub = useMutation({
     mutationFn: async ({ category_id, naam }: { category_id: string; naam: string }) => {
-      const { error } = await supabase.from("subcategories").insert({ category_id, naam });
+      const { data, error } = await supabase
+        .from("subcategories")
+        .insert({ category_id, naam })
+        .select("*")
+        .single();
+
       if (error) throw error;
+      return data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["categories"] }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["categories"] });
+    },
   });
 
   const removeSub = useMutation({
@@ -92,7 +113,9 @@ export function useCategories() {
       const { error } = await supabase.from("subcategories").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["categories"] }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["categories"] });
+    },
   });
 
   return { ...query, create, update, remove, addSub, removeSub };
