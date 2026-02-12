@@ -1,0 +1,121 @@
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+
+export type Space = {
+  id: string;
+  name: string;
+};
+
+type SpaceContextValue = {
+  spaces: Space[];
+  spacesLoading: boolean;
+
+  // "selectedSpaceId" = null betekent: Alles
+  selectedSpaceId: string | null;
+  setSelectedSpaceId: (id: string | null) => void;
+
+  // defaultSpaceId komt uit je profiel (profiles.household_id)
+  defaultSpaceId?: string;
+
+  // effectiveSpaceId = gekozen space of defaultSpaceId (handig voor inserts als "Alles" aanstaat)
+  effectiveSpaceId?: string;
+
+  // displayName van geselecteerde space ("Alles" als null)
+  selectedSpaceLabel: string;
+};
+
+const SpaceContext = createContext<SpaceContextValue | null>(null);
+
+function storageKey(userId: string) {
+  return `my-money-muse:selected-space:${userId}`;
+}
+
+export function SpaceProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  const [selectedSpaceId, setSelectedSpaceIdState] = useState<string | null>(null);
+
+  // 1) defaultSpaceId uit profile
+  const { data: profile, isLoading: profileLoading } = useQuery({
+    queryKey: ["profile", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("user_id", user!.id)
+        .single();
+      if (error) throw error;
+      return data as { household_id: string | null } | null;
+    },
+    enabled: !!user,
+  });
+
+  const defaultSpaceId = profile?.household_id ?? undefined;
+
+  // 2) beschikbare spaces (DB heet deze tabel nog households)
+  const { data: spaces = [], isLoading: spacesLoading } = useQuery({
+    queryKey: ["spaces", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("households")
+        .select("id, name")
+        .order("created_at", { ascending: true });
+
+      if (error) throw error;
+      return (data ?? []) as Space[];
+    },
+    enabled: !!user && !profileLoading,
+  });
+
+  // 3) laad saved selection uit localStorage
+  useEffect(() => {
+    if (!user) return;
+
+    const raw = localStorage.getItem(storageKey(user.id));
+    if (!raw) {
+      // default: Als je 1 defaultSpaceId hebt, zetten we hem als "die space" (niet "Alles")
+      if (defaultSpaceId) setSelectedSpaceIdState(defaultSpaceId);
+      return;
+    }
+
+    if (raw === "__ALL__") setSelectedSpaceIdState(null);
+    else setSelectedSpaceIdState(raw);
+  }, [user, defaultSpaceId]);
+
+  // 4) persist selection
+  const setSelectedSpaceId = (id: string | null) => {
+    if (!user) return;
+    setSelectedSpaceIdState(id);
+    localStorage.setItem(storageKey(user.id), id === null ? "__ALL__" : id);
+  };
+
+  const effectiveSpaceId = selectedSpaceId ?? defaultSpaceId;
+
+  const selectedSpaceLabel = useMemo(() => {
+    if (selectedSpaceId === null) return "Alles";
+    const found = spaces.find((s) => s.id === selectedSpaceId);
+    return found?.name ?? "Space";
+  }, [selectedSpaceId, spaces]);
+
+  const value: SpaceContextValue = {
+    spaces,
+    spacesLoading,
+
+    selectedSpaceId,
+    setSelectedSpaceId,
+
+    defaultSpaceId,
+    effectiveSpaceId,
+
+    selectedSpaceLabel,
+  };
+
+  return <SpaceContext.Provider value={value}>{children}</SpaceContext.Provider>;
+}
+
+export function useSpace() {
+  const ctx = useContext(SpaceContext);
+  if (!ctx) throw new Error("useSpace must be used within SpaceProvider");
+  return ctx;
+}
