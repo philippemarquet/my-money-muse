@@ -391,9 +391,21 @@ export type Database = {
     };
 
     Functions: {
-      get_household_id: {
-        Args: Record<PropertyKey, never>;
+      create_space: {
+        Args: { space_name: string };
         Returns: string;
+      };
+      rename_space: {
+        Args: { space_id: string; new_name: string };
+        Returns: void;
+      };
+      delete_space: {
+        Args: { space_id: string };
+        Returns: void;
+      };
+      set_default_space: {
+        Args: { space_id: string };
+        Returns: void;
       };
       is_household_member: {
         Args: { hid: string };
@@ -402,10 +414,6 @@ export type Database = {
       is_household_owner: {
         Args: { hid: string };
         Returns: boolean;
-      };
-      user_household_ids: {
-        Args: Record<PropertyKey, never>;
-        Returns: string[];
       };
     };
 
@@ -419,7 +427,9 @@ export type Database = {
   };
 };
 
-// Convenience types
-export type Tables<T extends keyof Database["public"]["Tables"]> = Database["public"]["Tables"][T]["Row"];
-export type TablesInsert<T extends keyof Database["public"]["Tables"]> = Database["public"]["Tables"][T]["Insert"];
-export type TablesUpdate<T extends keyof Database["public"]["Tables"]> = Database["public"]["Tables"][T]["Update"];
+export type Tables<T extends keyof Database["public"]["Tables"]> =
+  Database["public"]["Tables"][T]["Row"];
+export type TablesInsert<T extends keyof Database["public"]["Tables"]> =
+  Database["public"]["Tables"][T]["Insert"];
+export type TablesUpdate<T extends keyof Database["public"]["Tables"]> =
+  Database["public"]["Tables"][T]["Update"];
