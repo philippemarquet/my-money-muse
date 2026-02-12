@@ -20,20 +20,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
 import { useBudgets, Budget } from "@/hooks/useBudgets";
 import { useCategories } from "@/hooks/useCategories";
 import { useTransactions } from "@/hooks/useTransactions";
 import { toast } from "sonner";
-import { Separator } from "@/components/ui/separator";
-
-type SubPick = {
-  id: string;
-  label: string; // "Cat — Sub"
-  catType: "inkomsten" | "uitgaven";
-  catName: string;
-};
+import { MultiSubcategoryPicker } from "@/components/MultiSubcategoryPicker";
+import type { SubPick } from "@/components/SubcategoryPicker";
 
 const Budgets = () => {
   const { data: budgets = [], create, update, remove } = useBudgets();
@@ -62,20 +56,28 @@ const Budgets = () => {
       subcategory_ids: [],
     });
 
-  const subOptions: SubPick[] = useMemo(() => {
+  const allSubOptions: SubPick[] = useMemo(() => {
     const out: SubPick[] = [];
     for (const c of categories) {
       for (const s of c.subcategories ?? []) {
         out.push({
-          id: s.id,
-          label: `${c.naam} — ${s.naam}`,
-          catType: c.type as any,
-          catName: c.naam,
+          sub_id: s.id,
+          sub_name: s.naam,
+          cat_id: c.id,
+          cat_name: c.naam,
+          cat_type: c.type as any,
+          cat_color: c.kleur,
+          cat_icon: (c as any).icoon,
         });
       }
     }
-    return out.sort((a, b) => a.label.localeCompare(b.label));
+    return out.sort((a, b) => (a.cat_name + a.sub_name).localeCompare(b.cat_name + b.sub_name));
   }, [categories]);
+
+  const subOptions = useMemo(
+    () => allSubOptions.filter((s) => s.cat_type === form.richting),
+    [allSubOptions, form.richting]
+  );
 
   const openEdit = (b: Budget) => {
     setForm({
@@ -94,7 +96,7 @@ const Budgets = () => {
 
   const handleSave = async () => {
     try {
-      const payload = {
+      const payload: any = {
         naam: form.naam,
         bedrag: parseFloat(form.bedrag),
         type: form.type,
@@ -115,20 +117,10 @@ const Budgets = () => {
       setShowAdd(false);
       resetForm();
     } catch (err: any) {
-      toast.error(err.message ?? "Opslaan mislukt");
+      toast.error(err?.message ?? "Opslaan mislukt");
     }
   };
 
-  const toggleSub = (subId: string) => {
-    setForm((f) => ({
-      ...f,
-      subcategory_ids: f.subcategory_ids.includes(subId)
-        ? f.subcategory_ids.filter((id) => id !== subId)
-        : [...f.subcategory_ids, subId],
-    }));
-  };
-
-  // Spent per budget: based on linked subcategories
   const getSpent = (b: Budget) => {
     const subIds =
       b.budget_categories
@@ -153,25 +145,13 @@ const Budgets = () => {
 
   const dialogOpen = showAdd || !!editing;
 
-  const visibleSubs = subOptions.filter((s) => s.catType === form.richting);
-
-  // group subs by category name for nicer UI
-  const subsGrouped = useMemo(() => {
-    const m = new Map<string, SubPick[]>();
-    for (const s of visibleSubs) {
-      if (!m.has(s.catName)) m.set(s.catName, []);
-      m.get(s.catName)!.push(s);
-    }
-    return Array.from(m.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [visibleSubs]);
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-serif font-semibold">Budgetten</h1>
           <p className="text-muted-foreground mt-1">
-            Budgetten werken nu op subcategorie-niveau (cat is puur groepering)
+            Budgetten werken op subcategorie-niveau (cat is groepering)
           </p>
         </div>
         <Button
@@ -332,7 +312,9 @@ const Budgets = () => {
                 <Label>Richting</Label>
                 <Select
                   value={form.richting}
-                  onValueChange={(v) => setForm({ ...form, richting: v as any, subcategory_ids: [] })}
+                  onValueChange={(v) =>
+                    setForm({ ...form, richting: v as any, subcategory_ids: [] })
+                  }
                 >
                   <SelectTrigger className="rounded-xl">
                     <SelectValue />
@@ -343,6 +325,7 @@ const Budgets = () => {
                   </SelectContent>
                 </Select>
               </div>
+
               <div className="flex items-end pb-1 gap-2">
                 <Switch checked={form.rollover} onCheckedChange={(v) => setForm({ ...form, rollover: v })} />
                 <Label>Roll-over</Label>
@@ -353,43 +336,20 @@ const Budgets = () => {
 
             <div className="space-y-2">
               <Label>Subcategorieën</Label>
-
-              <div className="space-y-3 max-h-60 overflow-auto pr-1">
-                {subsGrouped.length === 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    Geen subcategorieën beschikbaar voor {form.richting}. Maak eerst categorieën + subcategorieën aan.
-                  </p>
-                )}
-
-                {subsGrouped.map(([catName, items]) => (
-                  <div key={catName} className="space-y-2">
-                    <div className="text-xs font-medium text-muted-foreground">{catName}</div>
-                    <div className="space-y-2">
-                      {items.map((s) => (
-                        <div key={s.id} className="flex items-center gap-2">
-                          <Checkbox
-                            checked={form.subcategory_ids.includes(s.id)}
-                            onCheckedChange={() => toggleSub(s.id)}
-                          />
-                          <span className="text-sm">{s.label}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <MultiSubcategoryPicker
+                value={form.subcategory_ids}
+                onChange={(ids) => setForm({ ...form, subcategory_ids: ids })}
+                options={subOptions}
+                placeholder={`Kies subcategorieën (${form.richting})`}
+              />
+              <p className="text-xs text-muted-foreground">
+                Tip: gebruik de zoekvelden om snel te vinden (categorie links, subcategorie rechts).
+              </p>
             </div>
           </div>
 
           <DialogFooter>
-            <Button
-              variant="outline"
-              className="rounded-xl"
-              onClick={() => {
-                setEditing(null);
-                setShowAdd(false);
-              }}
-            >
+            <Button variant="outline" className="rounded-xl" onClick={() => { setEditing(null); setShowAdd(false); }}>
               Annuleren
             </Button>
             <Button className="rounded-xl" onClick={handleSave}>
