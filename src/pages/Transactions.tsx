@@ -338,7 +338,6 @@ const Transactions = () => {
                   onChange={(id) => setForm({ ...form, subcategory_id: id })}
                   options={subOptionsAll}
                   placeholder="Kies subcategorie"
-                  showSearch
                 />
                 {selectedSub && (
                   <div className="text-xs text-muted-foreground">
