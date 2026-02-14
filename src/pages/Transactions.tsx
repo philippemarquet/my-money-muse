@@ -36,7 +36,7 @@ const Transactions = () => {
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [open, setOpen] = useState(false);
 
-  const subOptionsAll: SubPick[] = useMemo(() => {
+  const allSubOptions: SubPick[] = useMemo(() => {
     const out: SubPick[] = [];
     for (const c of categories) {
       for (const s of c.subcategories ?? []) {
@@ -53,6 +53,13 @@ const Transactions = () => {
     }
     return out.sort((a, b) => (a.cat_name + a.sub_name).localeCompare(b.cat_name + b.sub_name));
   }, [categories]);
+
+  // Filter subcategories based on transaction type (income/expense)
+  const subOptionsForEditing: SubPick[] = useMemo(() => {
+    if (!editing) return allSubOptions;
+    const type = editing.bedrag >= 0 ? "inkomsten" : "uitgaven";
+    return allSubOptions.filter((s) => s.cat_type === type);
+  }, [allSubOptions, editing]);
 
   const filtered = useMemo(() => {
     return transactions.filter((t) => {
@@ -106,8 +113,8 @@ const Transactions = () => {
 
   const selectedSub = useMemo(() => {
     if (!form.subcategory_id) return null;
-    return subOptionsAll.find((s) => s.sub_id === form.subcategory_id) ?? null;
-  }, [form.subcategory_id, subOptionsAll]);
+    return allSubOptions.find((s) => s.sub_id === form.subcategory_id) ?? null;
+  }, [form.subcategory_id, allSubOptions]);
 
   const save = async () => {
     try {
@@ -271,7 +278,7 @@ const Transactions = () => {
           if (!v) setEditing(null);
         }}
       >
-        <DialogContent className="rounded-2xl border-0 shadow-xl max-w-md">
+        <DialogContent className="rounded-2xl border-0 shadow-xl max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-serif">Transactie bewerken</DialogTitle>
           </DialogHeader>
@@ -336,7 +343,7 @@ const Transactions = () => {
                 <SubcategoryPicker
                   value={form.subcategory_id || null}
                   onChange={(id) => setForm({ ...form, subcategory_id: id })}
-                  options={subOptionsAll}
+                  options={subOptionsForEditing}
                   placeholder="Kies subcategorie"
                 />
                 {selectedSub && (
