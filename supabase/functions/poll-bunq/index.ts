@@ -184,7 +184,15 @@ function parseMonetaryAccounts(raw: any[]) {
                   : "Unknown";
 
     if (!acc) {
-      return { type: "Unknown", id: null, status: null, description: null, iban: null, balance: null };
+      return {
+        type: "Unknown",
+        id: null,
+        status: null,
+        description: null,
+        iban: null,
+        balance: null,
+        currency: null,
+      };
     }
 
     const iban = acc.alias?.find((a: any) => a.type === "IBAN")?.value ?? null;
@@ -233,6 +241,7 @@ async function ensureValidSession(supabase: any, conn: any, apiKey: string, priv
     const session = await createSession(conn.installation_token, apiKey, privateKey);
     sessionToken = session.sessionToken;
     userId = session.userId;
+
     await supabase
       .from("bunq_connections")
       .update({
@@ -285,6 +294,7 @@ async function resolveDefaultSubcategories(supabase: any, householdId: string) {
     const isExpense = (t: string) => t.includes("uitg") || t.includes("exp") || t.includes("expense");
 
     const filtered = list.filter((x) => (kind === "income" ? isIncome(x.type) : isExpense(x.type)));
+
     if (filtered.length) return filtered[0].id;
     if (list.length) return list[0].id;
     return null;
@@ -352,7 +362,6 @@ Deno.serve(async (req) => {
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) throw new Error("SUPABASE_URL/SERVICE_ROLE_KEY missing");
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
     const url = new URL(req.url);
 
     let body: any = {};
@@ -369,11 +378,9 @@ Deno.serve(async (req) => {
     const debug =
       body.debug === true || url.searchParams.get("debug") === "1" || url.searchParams.get("debug") === "true";
 
-    if (!householdId) {
-      return jsonResponse({ ok: false, error: "household_id required" }, 400);
-    }
+    if (!householdId) return jsonResponse({ ok: false, error: "household_id required" }, 400);
 
-    // 1) setup
+    // setup
     if (mode === "setup") {
       const { privateKey, publicKeyPem, privateKeyPem } = await generateKeyPair();
       const { installationToken, serverPublicKey } = await createInstallation(publicKeyPem, privateKey);
@@ -395,7 +402,6 @@ Deno.serve(async (req) => {
       );
 
       if (error) throw error;
-
       return jsonResponse({ ok: true, message: "setup complete", bunq_user_id: userId });
     }
 
@@ -404,7 +410,7 @@ Deno.serve(async (req) => {
     const privateKey = await importPrivateKey(conn.private_key_pem);
     const { sessionToken, userId } = await ensureValidSession(supabase, conn, BUNQ_API_KEY, privateKey);
 
-    // 2) accounts
+    // accounts
     if (mode === "accounts") {
       const raw = await fetchMonetaryAccountsRaw(sessionToken, userId, privateKey);
       const accounts = parseMonetaryAccounts(raw);
@@ -417,14 +423,12 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 3) auto-map by IBAN (so you don't need to manually copy bunq id)
+    // auto-map by IBAN
     if (mode === "auto-map") {
       const iban = (body.iban ?? url.searchParams.get("iban") ?? "").trim();
       const accountId = (body.account_id ?? url.searchParams.get("account_id") ?? "").trim();
 
-      if (!iban || !accountId) {
-        return jsonResponse({ ok: false, error: "Provide iban and account_id" }, 400);
-      }
+      if (!iban || !accountId) return jsonResponse({ ok: false, error: "Provide iban and account_id" }, 400);
 
       const raw = await fetchMonetaryAccountsRaw(sessionToken, userId, privateKey);
       const accounts = parseMonetaryAccounts(raw);
@@ -436,25 +440,29 @@ Deno.serve(async (req) => {
 
       const bunqId = Number(match.id);
 
-      const { error } = await supabase.from("bunq_account_mappings").insert({
-        household_id: householdId,
-        account_id: accountId,
-        bunq_monetary_account_id: bunqId,
-        last_payment_id: null,
-      });
+      const { error } = await supabase.from("bunq_account_mappings").upsert(
+        {
+          household_id: householdId,
+          account_id: accountId,
+          bunq_monetary_account_id: bunqId,
+          last_payment_id: null,
+        },
+        // this expects a unique constraint on (household_id, bunq_monetary_account_id)
+        { onConflict: "household_id,bunq_monetary_account_id" },
+      );
 
       if (error) throw error;
 
       return jsonResponse({
         ok: true,
-        message: "mapping created",
+        message: "mapping upserted",
         iban,
         account_id: accountId,
         bunq_monetary_account_id: bunqId,
       });
     }
 
-    // 4) sync-since (default)
+    // sync-since
     if (mode === "sync-since") {
       const dateFrom = isoDateOnly(body.date_from ?? url.searchParams.get("date_from") ?? "2026-01-01");
       const defaults = await resolveDefaultSubcategories(supabase, householdId);
@@ -477,8 +485,8 @@ Deno.serve(async (req) => {
       }
 
       let imported = 0;
-      const perAccount: any[] = [];
       let scannedPayments = 0;
+      const perAccount: any[] = [];
 
       for (const m of mapped) {
         const bunqAccId = Number(m.bunq_monetary_account_id);
