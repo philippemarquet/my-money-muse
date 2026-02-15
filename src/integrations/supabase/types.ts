@@ -135,6 +135,98 @@ export type Database = {
           },
         ]
       }
+      bunq_account_mappings: {
+        Row: {
+          account_id: string
+          bunq_connection_id: string
+          bunq_monetary_account_id: number
+          created_at: string
+          id: string
+          last_payment_id: number | null
+        }
+        Insert: {
+          account_id: string
+          bunq_connection_id: string
+          bunq_monetary_account_id: number
+          created_at?: string
+          id?: string
+          last_payment_id?: number | null
+        }
+        Update: {
+          account_id?: string
+          bunq_connection_id?: string
+          bunq_monetary_account_id?: number
+          created_at?: string
+          id?: string
+          last_payment_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bunq_account_mappings_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bunq_account_mappings_bunq_connection_id_fkey"
+            columns: ["bunq_connection_id"]
+            isOneToOne: false
+            referencedRelation: "bunq_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bunq_connections: {
+        Row: {
+          created_at: string
+          device_server_id: number | null
+          household_id: string
+          id: string
+          installation_token: string | null
+          private_key_pem: string
+          public_key_pem: string
+          server_public_key: string | null
+          session_token: string | null
+          session_user_id: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          device_server_id?: number | null
+          household_id: string
+          id?: string
+          installation_token?: string | null
+          private_key_pem: string
+          public_key_pem: string
+          server_public_key?: string | null
+          session_token?: string | null
+          session_user_id?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          device_server_id?: number | null
+          household_id?: string
+          id?: string
+          installation_token?: string | null
+          private_key_pem?: string
+          public_key_pem?: string
+          server_public_key?: string | null
+          session_token?: string | null
+          session_user_id?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bunq_connections_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: true
+            referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       categories: {
         Row: {
           created_at: string
