@@ -423,7 +423,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // auto-map by IBAN
+    // auto-map by IBAN (uses bunq_connection_id)
     if (mode === "auto-map") {
       const iban = (body.iban ?? url.searchParams.get("iban") ?? "").trim();
       const accountId = (body.account_id ?? url.searchParams.get("account_id") ?? "").trim();
@@ -442,13 +442,12 @@ Deno.serve(async (req) => {
 
       const { error } = await supabase.from("bunq_account_mappings").upsert(
         {
-          household_id: householdId,
+          bunq_connection_id: conn.id,
           account_id: accountId,
           bunq_monetary_account_id: bunqId,
           last_payment_id: null,
         },
-        // this expects a unique constraint on (household_id, bunq_monetary_account_id)
-        { onConflict: "household_id,bunq_monetary_account_id" },
+        { onConflict: "bunq_connection_id,bunq_monetary_account_id" },
       );
 
       if (error) throw error;
@@ -458,6 +457,7 @@ Deno.serve(async (req) => {
         message: "mapping upserted",
         iban,
         account_id: accountId,
+        bunq_connection_id: conn.id,
         bunq_monetary_account_id: bunqId,
       });
     }
@@ -469,8 +469,8 @@ Deno.serve(async (req) => {
 
       const { data: mappings, error: mapErr } = await supabase
         .from("bunq_account_mappings")
-        .select("id, account_id, bunq_monetary_account_id")
-        .eq("household_id", householdId);
+        .select("id, account_id, bunq_monetary_account_id, last_payment_id")
+        .eq("bunq_connection_id", conn.id);
 
       if (mapErr) throw mapErr;
 
@@ -481,6 +481,7 @@ Deno.serve(async (req) => {
           imported: 0,
           message: "No mappings found. Create bunq_account_mappings first.",
           date_from: dateFrom,
+          bunq_connection_id: conn.id,
         });
       }
 
@@ -544,7 +545,15 @@ Deno.serve(async (req) => {
         });
       }
 
-      return jsonResponse({ ok: true, imported, scannedPayments, date_from: dateFrom, perAccount, defaults });
+      return jsonResponse({
+        ok: true,
+        imported,
+        scannedPayments,
+        date_from: dateFrom,
+        perAccount,
+        defaults,
+        bunq_connection_id: conn.id,
+      });
     }
 
     return jsonResponse({ ok: false, error: `Unknown mode ${mode}` }, 400);
